@@ -13,19 +13,36 @@
                 <div class="brand-mark">XB</div>
                 <div>
                     <div class="brand-title">XBrowseR</div>
-                    <div class="brand-subtitle">Mihomo 指纹浏览器</div>
+                    <div class="brand-subtitle">指纹浏览器</div>
                 </div>
             </div>
 
-            <button class="nav-btn active" data-view="home">全部环境</button>
-            <button class="nav-btn" data-view="create">创建环境</button>
-            <button class="nav-btn" data-view="proxies">代理管理</button>
-            <button class="nav-btn" data-view="api">API 与 MCP</button>
+            <nav class="nav-container">
+                <button class="nav-btn active" data-view="home">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    全部环境
+                </button>
+                <button class="nav-btn" data-view="create">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="12" x2="12" y1="8" y2="16"/><line x1="8" x2="16" y1="12" y2="12"/></svg>
+                    创建环境
+                </button>
+                <button class="nav-btn" data-view="proxies">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+                    代理管理
+                </button>
+                <button class="nav-btn" data-view="api">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+                    API 与 MCP
+                </button>
+            </nav>
 
             <div class="sidebar-card">
-                <div class="sidebar-label">运行状态</div>
+                <div class="sidebar-label">运行状态 / Core</div>
                 <div id="sidebarRuntime" class="sidebar-value">加载中...</div>
-                <button id="openDataDirBtn" class="ghost-btn">打开数据目录</button>
+                <button id="openDataDirBtn" class="ghost-btn" style="width: 100%;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    打开数据目录
+                </button>
             </div>
         </aside>
 
@@ -41,15 +58,15 @@
             <section id="view-home" class="view active">
                 <div class="summary-strip">
                     <div class="summary-card">
-                        <div class="stat-label">环境总数</div>
+                        <div class="stat-label">环境总数 Total Profiles</div>
                         <div id="statProfiles" class="summary-value">0</div>
                     </div>
                     <div class="summary-card">
-                        <div class="stat-label">可用代理</div>
+                        <div class="stat-label">可用代理 Active Proxies</div>
                         <div id="statProxies" class="summary-value">0</div>
                     </div>
                     <div class="summary-card">
-                        <div class="stat-label">运行中</div>
+                        <div class="stat-label">运行中 Running Nodes</div>
                         <div id="statRunning" class="summary-value">0</div>
                     </div>
                 </div>
@@ -57,12 +74,14 @@
                 <div class="panel">
                     <div class="panel-head">
                         <div>
-                            <div class="panel-kicker">环境管理</div>
-                            <h2>全部环境</h2>
+                            <div class="panel-kicker">所有节点</div>
+                            <h2>环境管理列表</h2>
                         </div>
                         <div class="panel-actions">
-                            <button id="gotoCreateBtn" class="ghost-btn">创建环境</button>
-                            <button id="refreshHomeBtn" class="ghost-btn">刷新</button>
+                            <button id="gotoCreateBtn" class="primary-btn">创建环境</button>
+                            <button id="refreshHomeBtn" class="ghost-btn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-10.45l5.28 4.88"/></svg>
+                            </button>
                         </div>
                     </div>
 
@@ -73,7 +92,7 @@
                             <button class="tab-chip" data-filter="stopped">未启动</button>
                         </div>
                         <div class="search-wrap">
-                            <input id="homeSearchInput" type="text" placeholder="搜索环境名、标签、备注、代理">
+                            <input id="homeSearchInput" type="text" placeholder="搜索环境名、标签、备注...">
                         </div>
                     </div>
 
@@ -82,12 +101,12 @@
                             <thead>
                                 <tr>
                                     <th>编号</th>
-                                    <th>环境</th>
-                                    <th>代理</th>
-                                    <th>标签</th>
-                                    <th>最后打开</th>
-                                    <th>状态</th>
-                                    <th>操作</th>
+                                    <th>环境信息</th>
+                                    <th>代理网络</th>
+                                    <th>相关标签</th>
+                                    <th>最后活跃时间</th>
+                                    <th>状态指示</th>
+                                    <th style="text-align: right;">选项操作</th>
                                 </tr>
                             </thead>
                             <tbody id="profileTableBody"></tbody>
@@ -101,15 +120,15 @@
                     <div class="hero-panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">单个环境</div>
-                                <h2>创建环境</h2>
+                                <div class="panel-kicker">指纹配置</div>
+                                <h2>创建独立浏览器环境</h2>
                             </div>
-                            <div class="panel-tag">指纹 + 代理 + 独立存储</div>
+                            <div class="panel-tag">指纹特征隔离</div>
                         </div>
 
                         <div class="preset-bar">
-                            <button type="button" class="small-btn preset-url-btn" data-url="">内置检测页</button>
-                            <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IP 检测</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="">内置看板页</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IPinfo</button>
                             <button type="button" class="small-btn preset-url-btn" data-url="https://bot.sannysoft.com/">SannySoft</button>
                             <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
                             <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
@@ -118,88 +137,95 @@
                         <form id="profileForm" class="profile-form">
                             <input type="hidden" id="profileId">
 
-                            <label>
-                                <span>环境名称</span>
-                                <input id="profileName" type="text" placeholder="例如：HK-Shop-01" required>
-                            </label>
-
-                            <label>
-                                <span>启动网址</span>
-                                <input id="profileStartUrl" type="text" placeholder="留空则使用内置检测页">
-                            </label>
+                            <div class="grid two">
+                                <label>
+                                    <span>环境名称 Name</span>
+                                    <input id="profileName" type="text" placeholder="例如：Project-A-Worker01" required>
+                                </label>
+                                <label>
+                                    <span>启动网址 Startup URL</span>
+                                    <input id="profileStartUrl" type="text" placeholder="留空则使用内置看板页">
+                                </label>
+                            </div>
 
                             <div class="grid two">
                                 <label>
-                                    <span>平台</span>
+                                    <span>操作系统预设 Platform</span>
                                     <select id="profilePlatform">
-                                        <option value="Win32">Windows</option>
-                                        <option value="MacIntel">macOS</option>
+                                        <option value="Win32">Windows System</option>
+                                        <option value="MacIntel">macOS System</option>
                                     </select>
                                 </label>
-
                                 <label>
-                                    <span>代理</span>
+                                    <span>代理节点 Proxy Node</span>
                                     <select id="profileProxyId"></select>
                                 </label>
                             </div>
 
                             <label>
-                                <span>User-Agent</span>
-                                <textarea id="profileUserAgent" rows="3"></textarea>
+                                <span>自定义 UA (User-Agent)</span>
+                                <textarea id="profileUserAgent" rows="2" placeholder="填写自定义浏览器头"></textarea>
                             </label>
 
                             <div class="grid four">
                                 <label>
-                                    <span>语言</span>
-                                    <input id="profileLanguage" type="text" placeholder="留空则跟随代理 IP">
+                                    <span>界面语言 Language</span>
+                                    <input id="profileLanguage" type="text" placeholder="留空则跟随代理">
                                 </label>
                                 <label>
-                                    <span>时区</span>
-                                    <input id="profileTimezone" type="text" placeholder="留空则跟随代理 IP">
+                                    <span>时区 Timezone</span>
+                                    <input id="profileTimezone" type="text" placeholder="留空则跟随代理">
                                 </label>
                                 <label>
-                                    <span>CPU 线程</span>
-                                    <input id="profileHardware" type="number" min="2" max="32">
+                                    <span>CPU 核心分布</span>
+                                    <input id="profileHardware" type="number" min="2" max="32" placeholder="Auto">
                                 </label>
                                 <label>
-                                    <span>内存(GB)</span>
-                                    <input id="profileMemory" type="number" min="2" max="32">
+                                    <span>运行内存分配 (GB)</span>
+                                    <input id="profileMemory" type="number" min="2" max="32" placeholder="Auto">
                                 </label>
                             </div>
 
                             <div class="grid two">
                                 <label>
-                                    <span>屏幕宽度</span>
-                                    <input id="profileWidth" type="number" min="800">
+                                    <span>屏幕特征宽度 Width</span>
+                                    <input id="profileWidth" type="number" min="800" placeholder="e.g. 1920">
                                 </label>
                                 <label>
-                                    <span>屏幕高度</span>
-                                    <input id="profileHeight" type="number" min="600">
+                                    <span>屏幕特征高度 Height</span>
+                                    <input id="profileHeight" type="number" min="600" placeholder="e.g. 1080">
                                 </label>
                             </div>
 
                             <label>
-                                <span>标签</span>
-                                <input id="profileTags" type="text" placeholder="shop, hk, chrome145">
+                                <span>绑定标签 Tags</span>
+                                <input id="profileTags" type="text" placeholder="以逗号分割：shop, dev, test">
                             </label>
 
                             <label>
-                                <span>备注</span>
-                                <textarea id="profileNotes" rows="3" placeholder="账号备注、用途说明或操作记录"></textarea>
+                                <span>环境备忘录 Notes</span>
+                                <textarea id="profileNotes" rows="2" placeholder="输入相关账号密码及其它备忘记录"></textarea>
                             </label>
 
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">保存环境</button>
-                                <button type="button" id="randomizeBtn" class="ghost-btn">随机指纹</button>
-                                <button type="button" id="resetFormBtn" class="ghost-btn">重置表单</button>
+                                <button type="submit" class="primary-btn">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                                    保存并持久化环境
+                                </button>
+                                <button type="button" id="randomizeBtn" class="ghost-btn">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                    随机生成安全组合
+                                </button>
+                                <button type="button" id="resetFormBtn" class="ghost-btn">清空配置单</button>
                             </div>
                         </form>
                     </div>
 
                     <div class="hero-aside">
                         <div class="preview-card create-preview">
-                            <div class="preview-title">指纹预览</div>
-                            <pre id="fingerprintPreview">等待输入</pre>
+                            <div class="preview-title">预期生成指纹预览 Output</div>
+                            <pre id="fingerprintPreview">Waiting for configuration input...
+</pre>
                         </div>
                     </div>
                 </div>
@@ -210,22 +236,22 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">手动添加</div>
-                                <h2>新增代理</h2>
+                                <div class="panel-kicker">离线规则导入</div>
+                                <h2>手动新增代理节点</h2>
                             </div>
                         </div>
                         <form id="manualProxyForm" class="stack-form">
                             <label>
-                                <span>代理名称</span>
-                                <input id="manualProxyName" type="text" placeholder="例如：HK-Residential-01">
+                                <span>代理别名 Reference Name</span>
+                                <input id="manualProxyName" type="text" placeholder="例如：HK-Residential-109">
                             </label>
                             <label>
-                                <span>代理链接</span>
-                                <textarea id="manualProxyUrl" rows="4" placeholder="vmess://, vless://, trojan://, ss://, hy2://, tuic://"></textarea>
+                                <span>分享链接配置 URI Scheme</span>
+                                <textarea id="manualProxyUrl" rows="3" placeholder="支持: vmess://, vless://, trojan://, ss://, hy2:// ..."></textarea>
                             </label>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">添加代理</button>
-                                <button type="button" id="importProxyFileBtn" class="ghost-btn">导入代理文件</button>
+                                <button type="submit" class="primary-btn">验证并保存节点</button>
+                                <button type="button" id="importProxyFileBtn" class="ghost-btn">导入 YAML 文件</button>
                             </div>
                         </form>
                     </div>
@@ -233,48 +259,50 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">订阅导入</div>
-                                <h2>远程节点</h2>
+                                <div class="panel-kicker">云端托管</div>
+                                <h2>远程订阅中心</h2>
                             </div>
                         </div>
                         <form id="subscriptionForm" class="stack-form">
-                            <label>
-                                <span>订阅名称</span>
-                                <input id="subscriptionName" type="text" placeholder="例如：Airport-HK">
-                            </label>
-                            <label>
-                                <span>订阅地址</span>
-                                <input id="subscriptionUrl" type="text" placeholder="https://example.com/sub">
-                            </label>
+                            <div class="grid two">
+                                <label>
+                                    <span>订阅中心标识 Alias</span>
+                                    <input id="subscriptionName" type="text" placeholder="e.g. Airport-01">
+                                </label>
+                                <label style="grid-column: span 2;">
+                                    <span>订阅地址 Hosted URL</span>
+                                    <input id="subscriptionUrl" type="text" placeholder="https://example.com/sub/token">
+                                </label>
+                            </div>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">导入订阅</button>
+                                <button type="submit" class="primary-btn">抓取并导入节点池</button>
                             </div>
                         </form>
 
                         <div class="sub-list-wrap">
-                            <div class="sub-list-title">已保存订阅</div>
+                            <div class="sub-list-title">当前连接的订阅源</div>
                             <div id="subscriptionList" class="sub-list"></div>
                         </div>
                     </div>
                 </div>
 
-                <div class="panel">
+                <div class="panel" style="margin-top: 24px;">
                     <div class="panel-head">
                         <div>
-                            <div class="panel-kicker">代理列表</div>
-                            <h2>全部代理</h2>
+                            <div class="panel-kicker">全部资产</div>
+                            <h2>可用代理清单</h2>
                         </div>
                     </div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>名称</th>
-                                    <th>协议</th>
-                                    <th>来源</th>
-                                    <th>延迟</th>
-                                    <th>更新时间</th>
-                                    <th>操作</th>
+                                    <th>节点别名</th>
+                                    <th>协议类型</th>
+                                    <th>来源归属</th>
+                                    <th>联通延迟</th>
+                                    <th>最后更新时刻</th>
+                                    <th style="text-align: right;">节点操作</th>
                                 </tr>
                             </thead>
                             <tbody id="proxyTableBody"></tbody>
@@ -288,38 +316,38 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">本地服务</div>
-                                <h2>API / MCP</h2>
+                                <div class="panel-kicker">开发者接入</div>
+                                <h2>API / MCP 服务配置</h2>
                             </div>
                         </div>
 
                         <form id="apiForm" class="stack-form">
                             <div class="grid two">
                                 <label>
-                                    <span>启用 API</span>
+                                    <span>服务开关 Status</span>
                                     <select id="apiEnabled">
-                                        <option value="true">启用</option>
-                                        <option value="false">关闭</option>
+                                        <option value="true">State: 开启监听</option>
+                                        <option value="false">State: 安全关闭</option>
                                     </select>
                                 </label>
                                 <label>
-                                    <span>端口</span>
-                                    <input id="apiPort" type="number" min="1024" max="65535">
+                                    <span>暴露端口 Port</span>
+                                    <input id="apiPort" type="number" min="1024" max="65535" value="5005">
                                 </label>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">保存 API 设置</button>
+                                <button type="submit" class="primary-btn">应用配置并热重启</button>
                             </div>
                         </form>
 
-                        <div id="apiStatusCard" class="status-card"></div>
+                        <div id="apiStatusCard" class="status-card" style="margin-top: 24px;"></div>
                     </div>
 
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">可用接口</div>
-                                <h2>本地文档</h2>
+                                <div class="panel-kicker">说明文档</div>
+                                <h2>Endpoints 接口协议</h2>
                             </div>
                         </div>
                         <pre id="apiDocs" class="api-docs"></pre>

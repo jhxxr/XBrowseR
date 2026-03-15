@@ -6,306 +6,454 @@
     <title>工作台</title>
     <style>
         :root {
-            color-scheme: dark;
-            --bg-top: #03121d;
-            --bg-bottom: #020d16;
-            --panel: rgba(48, 55, 65, 0.97);
-            --panel-line: rgba(132, 146, 168, 0.16);
-            --text: #edf4ff;
-            --muted: rgba(220, 229, 241, 0.54);
-            --accent: #2da7ff;
+            --bg-color: #050b14;
+            --panel-bg: rgba(16, 25, 43, 0.75);
+            --panel-border: rgba(148, 163, 184, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --accent-glow: rgba(59, 130, 246, 0.4);
+            --success: #10b981;
+            
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            --backdrop-blur: blur(20px);
+            
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
         }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
         * {
             box-sizing: border-box;
-        }
-
-        html,
-        body {
-            min-height: 100%;
-        }
-
-        body {
             margin: 0;
-            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            color: var(--text);
-            background:
-                radial-gradient(circle at 16% 100%, rgba(0, 170, 255, 0.12), transparent 30%),
-                radial-gradient(circle at 86% 100%, rgba(91, 71, 255, 0.12), transparent 26%),
-                linear-gradient(180deg, #02131d, #03111a 52%, #020b13);
+            padding: 0;
         }
 
-        .shell {
-            width: min(100%, 760px);
-            margin: 0 auto;
-            padding: 22px 18px 22px;
+        html, body {
+            height: 100%;
+            width: 100%;
+        }
+
+        body {
+            font-family: var(--font-family);
+            color: var(--text-main);
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 90% 100%, rgba(139, 92, 246, 0.15) 0%, transparent 40%),
+                linear-gradient(180deg, #050b14 0%, #0a1120 100%);
+            background-attachment: fixed;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 2.5rem 1.5rem;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 860px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 12px;
-            color: var(--muted);
-            font-size: 11px;
-            letter-spacing: 0.01em;
+            padding: 0 8px;
+            margin-bottom: 8px;
         }
 
-        .title-wrap {
+        .title-group {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 16px;
         }
 
-        .chip {
+        .profile-chip {
             display: inline-flex;
             align-items: center;
-            padding: 3px 9px;
+            padding: 6px 16px;
             border-radius: 999px;
-            background: linear-gradient(135deg, #2bb6ff, #3881ff);
-            color: #f6fbff;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            box-shadow: 0 8px 16px rgba(31, 125, 255, 0.22);
-        }
-
-        .index-label {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
             color: #ffffff;
-            font-size: 18px;
+            font-size: 13px;
             font-weight: 700;
-            line-height: 1;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 16px var(--accent-glow);
+            text-transform: uppercase;
         }
 
-        .hero {
+        .profile-index {
+            color: var(--text-main);
+            font-size: 20px;
+            font-weight: 800;
+            opacity: 0.9;
+        }
+
+        .clock-display {
+            font-family: 'Inter', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            padding: 8px 16px;
+            border-radius: 12px;
+            backdrop-filter: var(--backdrop-blur);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .hero-card {
             position: relative;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            padding: 36px;
+            box-shadow: var(--glass-shadow);
+            backdrop-filter: var(--backdrop-blur);
             overflow: hidden;
-            min-height: 170px;
-            padding: 18px 18px 16px;
-            border-radius: 14px;
-            background: var(--panel);
-            border: 1px solid var(--panel-line);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
         }
 
-        .hero-pattern {
+        .hero-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .hero-bg {
             position: absolute;
-            top: -12px;
-            right: -6px;
-            bottom: -18px;
-            width: 350px;
-            background:
-                repeating-radial-gradient(circle at 8% 50%, rgba(54, 121, 214, 0) 0 18px, rgba(54, 121, 214, 0.2) 18px 20px, rgba(54, 121, 214, 0) 20px 36px),
-                linear-gradient(180deg, rgba(26, 39, 56, 0), rgba(26, 39, 56, 0.18));
-            opacity: 0.72;
-            transform: rotate(-7deg);
+            top: -50%;
+            right: -20%;
+            width: 80%;
+            height: 200%;
+            background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+            transform: rotate(-15deg);
+            z-index: 0;
             pointer-events: none;
         }
 
-        .hero-top {
-            position: relative;
-            z-index: 1;
+        .hero-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 16px;
-        }
-
-        .flag {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: grid;
-            place-items: center;
-            background: linear-gradient(180deg, #203047, #182435);
-            box-shadow:
-                inset 0 1px 0 rgba(255, 255, 255, 0.16),
-                0 8px 14px rgba(0, 0, 0, 0.2);
-        }
-
-        .flag::before {
-            content: "";
-            position: absolute;
-            inset: 7px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent 68%);
-            opacity: 0.66;
-        }
-
-        .flag-text {
-            position: relative;
             z-index: 1;
-            font-size: 22px;
-            line-height: 1;
+        }
+
+        .flag-container {
+            width: 64px;
+            height: 64px;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.15);
+            font-size: 36px;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .hero-card:hover .flag-container {
+            transform: scale(1.1) rotate(-8deg);
         }
 
         .refresh-btn {
-            position: relative;
-            z-index: 1;
-            border: 1px solid rgba(75, 164, 255, 0.4);
-            background: rgba(8, 17, 29, 0.72);
-            color: #33a8ff;
-            border-radius: 8px;
-            padding: 6px 12px;
-            font-size: 11px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            color: #60a5fa;
+            padding: 10px 18px;
+            border-radius: 12px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1;
+            font-family: var(--font-family);
+            outline: none;
+        }
+
+        .refresh-btn svg {
+            transition: transform 0.3s ease;
+        }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
+            color: #93c5fd;
+            box-shadow: 0 0 16px rgba(59, 130, 246, 0.3);
+        }
+
+        .refresh-btn:hover:not(:disabled) svg {
+            transform: rotate(180deg);
+        }
+
+        .refresh-btn:active:not(:disabled) {
+            transform: scale(0.96);
         }
 
         .refresh-btn:disabled {
-            opacity: 0.7;
+            opacity: 0.5;
             cursor: wait;
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(255,255,255,0.1);
+            color: var(--text-muted);
         }
 
-        .hero-main {
-            position: relative;
+        .hero-body {
             z-index: 1;
-            margin-top: 56px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
-        .location {
-            font-size: 16px;
-            font-weight: 700;
-            line-height: 1.3;
-            letter-spacing: -0.01em;
+        .location-text {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: -0.5px;
+            line-height: 1.2;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
 
-        .ip-line {
-            margin-top: 5px;
-            color: var(--accent);
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: -0.01em;
-        }
-
-        .card {
-            margin-top: 14px;
-            padding: 15px 14px 14px;
-            border-radius: 12px;
-            background: var(--panel);
-            border: 1px solid var(--panel-line);
-        }
-
-        .section-title {
-            margin: 0 0 9px;
-            color: #e9f2ff;
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: 92px 1fr;
-            row-gap: 9px;
-            column-gap: 10px;
-            font-size: 12px;
-        }
-
-        .label {
-            color: rgba(237, 244, 255, 0.84);
+        .ip-text {
+            font-size: 22px;
             font-weight: 600;
+            color: #60a5fa;
+            font-family: 'Inter', monospace;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
-        .value {
-            color: var(--muted);
-            word-break: break-word;
-            line-height: 1.45;
+        .ip-text::before {
+            content: '';
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--success);
+            box-shadow: 0 0 12px var(--success);
+            animation: pulse 2s infinite ease-in-out;
         }
 
-        .section-gap {
-            height: 22px;
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0.8; }
+        }
+
+        .info-grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .info-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 20px;
+            padding: 28px;
+            backdrop-filter: var(--backdrop-blur);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .info-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-title::before {
+            content: '';
+            display: block;
+            width: 16px;
+            height: 4px;
+            border-radius: 2px;
+            background: linear-gradient(90deg, var(--accent-primary), transparent);
+        }
+
+        .data-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .data-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .data-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-value {
+            font-size: 15px;
+            font-weight: 500;
+            color: #e2e8f0;
+            word-break: break-all;
+            line-height: 1.5;
+        }
+        
+        .badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin-right: 6px;
+            font-family: 'Inter', monospace;
+            color: #bae6fd;
         }
 
         .footer {
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            margin-top: 9px;
-            color: var(--muted);
-            font-size: 11px;
+            align-items: center;
+            padding: 16px 8px 0;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: 8px;
         }
 
         .footer a {
-            color: #34a8ff;
+            color: var(--accent-primary);
             text-decoration: none;
+            transition: color 0.2s;
+            font-weight: 500;
         }
 
-        @media (max-width: 760px) {
-            .shell {
-                padding-left: 12px;
-                padding-right: 12px;
-            }
+        .footer a:hover {
+            color: #93c5fd;
+            text-decoration: underline;
+        }
 
-            .hero-pattern {
-                width: 280px;
-                opacity: 0.44;
-            }
-
-            .info-grid {
-                grid-template-columns: 1fr;
-            }
+        @media (max-width: 768px) {
+            body { padding: 1.5rem 1rem; }
+            .info-grid-container { grid-template-columns: 1fr; }
+            .hero-card { padding: 28px 24px; }
+            .location-text { font-size: 24px; }
+            .ip-text { font-size: 18px; }
+            .topbar { flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+            .clock-display { width: 100%; text-align: center; }
         }
     </style>
 </head>
 <body>
-    <div class="shell">
-        <div class="topbar">
-            <div class="title-wrap">
-                <span class="chip" id="profileName">JHX</span>
-                <span class="index-label">1</span>
+    <div class="container">
+        <!-- Top Navigation -->
+        <header class="topbar">
+            <div class="title-group">
+                <div class="profile-chip" id="profileName">JHX</div>
+                <div class="profile-index">1</div>
             </div>
-            <div id="clockLine">--</div>
-        </div>
+            <div class="clock-display" id="clockLine">--</div>
+        </header>
 
-        <section class="hero">
-            <div class="hero-pattern" aria-hidden="true"></div>
-            <div class="hero-top">
-                <div class="flag" id="flag">
-                    <span class="flag-text" id="flagText">🌐</span>
+        <!-- Main Network Hero -->
+        <section class="hero-card">
+            <div class="hero-bg"></div>
+            <div class="hero-header">
+                <div class="flag-container" id="flag">
+                    <span id="flagText">🌐</span>
                 </div>
-                <button class="refresh-btn" id="refreshBtn" type="button">检测代理 IP</button>
+                <button class="refresh-btn" id="refreshBtn" type="button">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-10.45l5.28 4.88"/></svg>
+                    检测代理 IP
+                </button>
             </div>
-
-            <div class="hero-main">
-                <div class="location" id="locationText">--</div>
-                <div class="ip-line" id="ipText">IP: --</div>
-            </div>
-        </section>
-
-        <section class="card">
-            <h2 class="section-title">环境信息</h2>
-            <div class="info-grid">
-                <div class="label">备注:</div>
-                <div class="value" id="notesValue">--</div>
-                <div class="label">项目:</div>
-                <div class="value" id="projectValue">默认项目</div>
-                <div class="label">标签:</div>
-                <div class="value" id="tagsValue">--</div>
-            </div>
-
-            <div class="section-gap"></div>
-
-            <h2 class="section-title">运行时指纹</h2>
-            <div class="info-grid">
-                <div class="label">内核:</div>
-                <div class="value" id="kernelValue">--</div>
-                <div class="label">语言:</div>
-                <div class="value" id="languageValue">--</div>
-                <div class="label">时区:</div>
-                <div class="value" id="timezoneValue">--</div>
-                <div class="label">User-Agent:</div>
-                <div class="value" id="uaValue">--</div>
+            <div class="hero-body">
+                <h1 class="location-text" id="locationText">--</h1>
+                <div class="ip-text" id="ipText">IP: --</div>
             </div>
         </section>
 
-        <div class="footer">
-            <div>地理信息来源: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
-            <div>version 1.0</div>
+        <!-- details -->
+        <div class="info-grid-container">
+            <!-- Environment info -->
+            <section class="info-card">
+                <h2 class="card-title">环境信息</h2>
+                <div class="data-list">
+                    <div class="data-item">
+                        <span class="data-label">备注 / Notes</span>
+                        <span class="data-value" id="notesValue">--</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">项目 / Project</span>
+                        <span class="data-value"><span class="badge" id="projectValue">默认项目</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">标签 / Tags</span>
+                        <span class="data-value" id="tagsValue">--</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Fingerprint info -->
+            <section class="info-card">
+                <h2 class="card-title">运行时指纹</h2>
+                <div class="data-list">
+                    <div class="data-item">
+                        <span class="data-label">内核 / Kernel</span>
+                        <span class="data-value" id="kernelValue">--</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">语言 / Language</span>
+                        <span class="data-value"><span class="badge" id="languageValue">--</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">时区 / Timezone</span>
+                        <span class="data-value"><span class="badge" id="timezoneValue">--</span></span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">User-Agent</span>
+                        <span class="data-value" id="uaValue" style="color: var(--text-muted); font-size: 13px;">--</span>
+                    </div>
+                </div>
+            </section>
         </div>
+
+        <footer class="footer">
+            <div>地理信息来源: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
+            <div>version 2.0.0</div>
+        </footer>
     </div>
 
     <script>
@@ -440,7 +588,7 @@
             const locationParts = [geo.country, geo.region, geo.city].filter(Boolean);
             updateFlag(geo.countryCode);
             document.getElementById('locationText').textContent = locationParts.length ? locationParts.join(' / ') : '--';
-            document.getElementById('ipText').textContent = `IP: ${geo.ip || '--'}`;
+            document.getElementById('ipText').innerHTML = `IP: ${geo.ip || '--'}`;
 
             const sourceName = geo.source || '--';
             const sourceLink = document.getElementById('sourceLink');
@@ -485,7 +633,12 @@
             }
 
             refreshBtn.disabled = true;
-            refreshBtn.textContent = refresh ? '检测中...' : '检测代理 IP';
+            refreshBtn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-10.45l5.28 4.88"/></svg>
+                ${refresh ? '检测中...' : '检测代理 IP'}
+            `;
+            const spinEl = refreshBtn.querySelector('.spin');
+            if(spinEl) spinEl.style.animation = "spin 1s linear infinite";
 
             try {
                 if (!currentProfileLoaded || !refresh) {
@@ -511,17 +664,29 @@
                 renderGeo(geo);
             } catch (error) {
                 document.getElementById('locationText').textContent = '加载失败';
-                document.getElementById('ipText').textContent = 'IP: --';
+                document.getElementById('ipText').innerHTML = 'IP: --';
                 updateFlag('');
             } finally {
                 refreshBtn.disabled = false;
-                refreshBtn.textContent = '检测代理 IP';
+                refreshBtn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-10.45l5.28 4.88"/></svg>
+                    检测代理 IP
+                `;
             }
         }
 
         refreshBtn.addEventListener('click', () => loadDashboard(true));
         loadDashboard(false);
         setInterval(() => updateClock(currentTimezone), 1000);
+        
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
