@@ -180,12 +180,36 @@ function scheduleLaunchProgressCleanup(profileId, delayMs) {
 
 function mountAgentSettingsFields() {
     const timeoutFieldWrap = agentToolTimeoutInput?.closest('.grid.two');
-    const formActions = agentProviderForm?.querySelector('.form-actions');
-    if (!timeoutFieldWrap || !formActions || timeoutFieldWrap.parentElement === agentProviderForm) {
+    const providerPanel = agentProviderForm?.closest('.panel');
+    if (!timeoutFieldWrap || !providerPanel) {
+        return;
+    }
+    if (providerPanel.querySelector('#agentGlobalSettingsCard')) {
         return;
     }
 
-    agentProviderForm.insertBefore(timeoutFieldWrap, formActions);
+    const settingsCard = document.createElement('div');
+    settingsCard.id = 'agentGlobalSettingsCard';
+    settingsCard.className = 'agent-global-settings sub-list-wrap';
+    settingsCard.innerHTML = `
+        <div class="sub-list-title">Agent 全局设置</div>
+        <div class="agent-setting-note">
+            这些配置作用于整个 Agent 运行层，不绑定任何供应商。
+        </div>
+        <div class="form-actions">
+            <button id="saveAgentSettingsBtn" type="button" class="ghost-btn">保存 Agent 设置</button>
+        </div>
+    `;
+
+    const providerListWrap = providerPanel.querySelector('.sub-list-wrap');
+    providerPanel.insertBefore(settingsCard, providerListWrap || null);
+    settingsCard.insertBefore(timeoutFieldWrap, settingsCard.querySelector('.form-actions'));
+
+    settingsCard.querySelector('#saveAgentSettingsBtn').addEventListener('click', async () => {
+        const agentSettings = readAgentSettingsPayload();
+        await window.xbrowser.saveSettings({ agent: agentSettings });
+        showToast('Agent 全局设置已保存。');
+    });
 }
 
 function renderLaunchProgressInline(profileId) {
@@ -554,7 +578,6 @@ function fillAgentProviderForm(provider = null) {
     document.getElementById('agentProviderBaseUrl').value = provider?.baseUrl || formatMeta.defaultBaseUrl || '';
     document.getElementById('agentProviderApiKey').value = provider?.apiKey || '';
     document.getElementById('agentProviderManualModel').value = provider?.model || '';
-    agentToolTimeoutInput.value = String(getAgentToolTimeoutMs());
     renderAgentModelOptions(provider);
 }
 
@@ -579,6 +602,12 @@ function readAgentSettingsPayload() {
     return {
         toolTimeoutMs: Math.max(5000, Math.min(60000, Number(agentToolTimeoutInput.value) || 20000))
     };
+}
+
+function renderAgentSettings() {
+    if (agentToolTimeoutInput) {
+        agentToolTimeoutInput.value = String(getAgentToolTimeoutMs());
+    }
 }
 
 function renderAgentProviderList() {
@@ -776,6 +805,7 @@ function renderAgentDocs() {
 
 function renderAgentPanel() {
     openAgentLaunchDialogBtn.textContent = '打开 Agent 窗口';
+    renderAgentSettings();
     renderAgentLaunchOptions();
     renderAgentProviderList();
     renderAgentRuntime();
@@ -983,7 +1013,6 @@ agentProviderForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 
     const payload = readAgentProviderPayload();
-    const agentSettings = readAgentSettingsPayload();
     if (!payload.apiKey) {
         showToast('API Key 不能为空。');
         return;
@@ -993,7 +1022,6 @@ agentProviderForm.addEventListener('submit', async (event) => {
         return;
     }
 
-    await window.xbrowser.saveSettings({ agent: agentSettings });
     const provider = await window.xbrowser.saveAgentProvider(payload);
     fillAgentProviderForm(provider);
     showToast('供应商配置已保存。');

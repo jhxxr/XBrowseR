@@ -799,6 +799,11 @@ pre {
     font-size: 13px;
 }
 
+.agent-global-settings {
+    display: grid;
+    gap: 14px;
+}
+
 .agent-provider-item {
     padding: 16px;
     border-radius: 14px;
