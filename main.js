@@ -17,6 +17,7 @@ const { ensureFingerprintExtension } = require('./lib/chrome-extension');
 
 const BASE_DIR = __dirname;
 const store = createStore(BASE_DIR);
+const PROFILE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 let profiles = [];
 let settings = null;
@@ -57,10 +58,53 @@ function resolveBrowserExecutable() {
     return candidates.find(candidate => fs.existsSync(candidate)) || '';
 }
 
+function generateProfileCode(existingProfiles = []) {
+    const usedCodes = new Set(
+        existingProfiles
+            .map((profile) => String(profile?.code || '').trim().toUpperCase())
+            .filter(Boolean)
+    );
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+        let suffix = '';
+        for (let index = 0; index < 6; index += 1) {
+            const next = Math.floor(Math.random() * PROFILE_CODE_ALPHABET.length);
+            suffix += PROFILE_CODE_ALPHABET[next];
+        }
+        const code = suffix;
+        if (!usedCodes.has(code)) {
+            return code;
+        }
+    }
+
+    return uuidv4().replace(/-/g, '').slice(0, 6).toUpperCase();
+}
+
+function normalizeProfilesWithCodes(items = []) {
+    const normalized = [];
+    const usedCodes = new Set();
+
+    for (const profile of items) {
+        const next = { ...profile };
+        const currentCode = String(next.code || '').trim().toUpperCase();
+        if (!currentCode || usedCodes.has(currentCode)) {
+            next.code = generateProfileCode(normalized);
+        } else {
+            next.code = currentCode;
+        }
+        usedCodes.add(next.code);
+        normalized.push(next);
+    }
+
+    return normalized;
+}
+
 function buildProfile(input = {}) {
     const fingerprint = createFingerprint(input.fingerprint || {});
+    const existing = input.id ? profiles.find((profile) => profile.id === input.id) : null;
     return {
         id: input.id || uuidv4(),
+        code: input.code || existing?.code || generateProfileCode(profiles),
         name: input.name || `Window-${Date.now()}`,
         startUrl: input.startUrl || '',
         proxyId: input.proxyId || '',
@@ -415,6 +459,49 @@ async function stopProfile(profileId) {
     return true;
 }
 
+async function clearProfileCache(profileId) {
+    const profile = getProfile(profileId);
+    if (!profile) {
+        throw new Error('环境不存在');
+    }
+
+    if (runningProfiles.has(profileId)) {
+        throw new Error('请先停止该环境，再清理缓存');
+    }
+
+    const userDataDir = path.join(store.dataDir, 'profiles', profile.id);
+    const cacheTargets = [
+        'Cache',
+        'Code Cache',
+        'GPUCache',
+        'DawnCache',
+        'GrShaderCache',
+        path.join('Default', 'Cache'),
+        path.join('Default', 'Code Cache'),
+        path.join('Default', 'GPUCache'),
+        path.join('Default', 'DawnCache'),
+        path.join('Default', 'GrShaderCache'),
+        path.join('Default', 'Service Worker', 'CacheStorage'),
+        path.join('Default', 'Service Worker', 'ScriptCache'),
+        path.join('Default', 'Network', 'Cache'),
+    ];
+
+    const removed = [];
+    for (const relativePath of cacheTargets) {
+        const targetPath = path.join(userDataDir, relativePath);
+        if (await fs.pathExists(targetPath)) {
+            await fs.remove(targetPath);
+            removed.push(relativePath);
+        }
+    }
+
+    return {
+        ok: true,
+        removed,
+        cleared: removed.length
+    };
+}
+
 async function openProfile(profileId, { requestId = '' } = {}) {
     const profile = getProfile(profileId);
     if (!profile) throw new Error('环境不存在');
@@ -637,6 +724,13 @@ function createApiServer(port) {
             return;
         }
 
+        const clearCacheMatch = requestUrl.pathname.match(/^\/api\/profiles\/([^/]+)\/clear-cache$/);
+        if (req.method === 'POST' && clearCacheMatch) {
+            const result = await clearProfileCache(decodeURIComponent(clearCacheMatch[1]));
+            res.end(JSON.stringify(result));
+            return;
+        }
+
         if (req.method === 'GET' && requestUrl.pathname === '/mcp') {
             res.end(JSON.stringify({
                 name: 'XBrowseR MCP',
@@ -729,8 +823,9 @@ app.whenReady().then(async () => {
         console.error(`Failed to auto-download Mihomo ${MIHOMO_VERSION}:`, error);
     }
 
-    profiles = await store.loadProfiles();
+    profiles = normalizeProfilesWithCodes(await store.loadProfiles());
     settings = await store.loadSettings();
+    await store.saveProfiles(profiles);
 
     await startInternalServer();
     createMainWindow();
@@ -756,6 +851,7 @@ app.whenReady().then(async () => {
         notifyState();
         return true;
     });
+    ipcMain.handle('profile:clear-cache', async (event, id) => clearProfileCache(id));
     ipcMain.handle('profile:launch', async (event, payload) => {
         const profileId = typeof payload === 'string' ? payload : payload?.id;
         const requestId = typeof payload === 'string' ? '' : (payload?.requestId || '');

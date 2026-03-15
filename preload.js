@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('xbrowser', {
     generateFingerprint: (payload) => ipcRenderer.invoke('fingerprint:generate', payload),
     saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload),
     deleteProfile: (id) => ipcRenderer.invoke('profile:delete', id),
+    clearProfileCache: (id) => ipcRenderer.invoke('profile:clear-cache', id),
     launchProfile: (id, requestId = '') => ipcRenderer.invoke('profile:launch', { id, requestId }),
     stopProfile: (id) => ipcRenderer.invoke('profile:stop', id),
     addManualProxy: (payload) => ipcRenderer.invoke('proxy:add-manual', payload),

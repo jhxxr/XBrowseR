@@ -59,6 +59,20 @@ function formatDate(value) {
     return new Date(value).toLocaleString();
 }
 
+function getProfileCode(profile) {
+    const current = String(profile?.code || '').trim().toUpperCase();
+    if (current) {
+        return current.replace(/^JHX-/, '');
+    }
+
+    const fallback = String(profile?.id || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (fallback) {
+        return fallback.slice(0, 6);
+    }
+
+    return 'UNSET';
+}
+
 function getProxyProtocol(proxy) {
     if (proxy.proxy?.type) return proxy.proxy.type.toUpperCase();
     if (proxy.url) return (proxy.url.split('://')[0] || 'UNK').toUpperCase();
@@ -241,6 +255,7 @@ function renderProfileActions(profileId) {
             <button class="small-btn" data-action="edit-profile" data-id="${profileId}">编辑</button>
             ${renderLaunchProgressInline(profileId)}
             <button class="small-btn" data-action="stop-profile" data-id="${profileId}">停止</button>
+            <button class="small-btn" data-action="clear-profile-cache" data-id="${profileId}">清缓存</button>
             <button class="small-btn danger" data-action="delete-profile" data-id="${profileId}">删除</button>
         </div>
     `;
@@ -266,7 +281,7 @@ function renderProfileTable() {
         return;
     }
 
-    profileTableBody.innerHTML = filtered.map((profile, index) => {
+    profileTableBody.innerHTML = filtered.map((profile) => {
         const runtime = getRunning(profile.id);
         if (runtime && launchProgressByProfileId.has(profile.id)) {
             clearLaunchProgress(profile.id);
@@ -275,7 +290,7 @@ function renderProfileTable() {
         const proxy = proxies.find((item) => item.id === profile.proxyId);
         return `
             <tr>
-                <td>JHX-${String(index + 1).padStart(2, '0')}</td>
+                <td>${getProfileCode(profile)}</td>
                 <td>
                     <div class="profile-title">${profile.name}</div>
                     <div class="profile-meta">${isBuiltInStartUrl(profile.startUrl) ? '内置检测页' : (profile.startUrl || '-')}</div>
@@ -355,6 +370,7 @@ function renderApiPanel() {
         'POST /api/profiles',
         'POST /api/profiles/:id/open',
         'POST /api/profiles/:id/stop',
+        'POST /api/profiles/:id/clear-cache',
         'GET  /api/proxies',
         'GET  /mcp',
         '',
@@ -416,6 +432,14 @@ async function handleProfileActions(event) {
         clearLaunchProgress(id);
         renderProfileTable();
         showToast('环境已停止。');
+        return;
+    }
+
+    if (action === 'clear-profile-cache') {
+        if (!window.confirm('确定清空这个环境的浏览器缓存吗？这不会删除 Cookie、LocalStorage 和指纹配置。')) return;
+        const result = await window.xbrowser.clearProfileCache(id);
+        const cleared = Number(result?.cleared || 0);
+        showToast(cleared > 0 ? `已清理 ${cleared} 个缓存目录。` : '没有可清理的缓存目录。');
         return;
     }
 
