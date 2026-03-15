@@ -4,16 +4,16 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XBrowseR Agent Console</title>
+    <title>XBrowseR Agent 控制台</title>
     <link rel="stylesheet" href="./agent-window.css">
 </head>
 <body>
     <div class="shell">
         <header class="hero">
             <div class="hero-copy">
-                <div class="eyebrow">Task Console</div>
-                <h1>Agent 任务控制台</h1>
-                <p>默认面向批量窗口任务。单窗口持续会话保留为高级模式，用于精细接管某一个指纹窗口。</p>
+                <div class="eyebrow">任务控制台</div>
+                <h1>Agent 控制台</h1>
+                <p>批量任务是默认工作流；单窗口会话保留为高级模式，用于持续接管单个浏览器窗口。</p>
             </div>
             <div class="hero-side">
                 <div id="agentStatusBadge" class="status-badge">空闲</div>
@@ -27,10 +27,10 @@
         <section class="panel launch-panel">
             <div class="panel-head">
                 <div>
-                    <div class="eyebrow">Launch</div>
-                    <h2 id="launchTitle">批量任务启动器</h2>
+                    <div class="eyebrow">启动区</div>
+                    <h2 id="launchTitle">批量启动器</h2>
                 </div>
-                <div id="launchMeta" class="panel-meta">多窗口是第一公民</div>
+                <div id="launchMeta" class="panel-meta">批量优先</div>
             </div>
 
             <div class="stack">
@@ -41,14 +41,14 @@
 
                 <div id="batchModeSection" class="mode-section">
                     <label>
-                        <span>任务说明</span>
-                        <textarea id="agentBatchPrompt" rows="4" placeholder="例如：依次打开每个窗口的 Instagram 首页，确认是否登录，并把停留结果汇总给我。"></textarea>
+                        <span>批量任务说明</span>
+                        <textarea id="agentBatchPrompt" rows="4" placeholder="例如：依次打开每个已选窗口，检查登录状态，并汇总结果。"></textarea>
                     </label>
                     <div class="profile-picker-head">
                         <span>选择窗口</span>
                         <div class="profile-picker-actions">
                             <button id="selectAllProfilesBtn" type="button" class="text-btn">全选</button>
-                            <button id="selectRunningProfilesBtn" type="button" class="text-btn">仅选运行中</button>
+                            <button id="selectRunningProfilesBtn" type="button" class="text-btn">仅运行中</button>
                             <button id="clearSelectedProfilesBtn" type="button" class="text-btn">清空</button>
                         </div>
                     </div>
@@ -63,7 +63,7 @@
                     </label>
                     <label>
                         <span>首条消息</span>
-                        <textarea id="agentLaunchMessage" rows="4" placeholder="例如：先观察当前页面，再告诉我下一步可以做什么。"></textarea>
+                        <textarea id="agentLaunchMessage" rows="4" placeholder="例如：先检查当前页面，再告诉我下一步可以做什么。"></textarea>
                     </label>
                     <button id="startSingleSessionBtn" type="button" class="primary-btn">启动单窗口会话</button>
                 </div>
@@ -74,12 +74,12 @@
             <section class="panel board-panel">
                 <div class="panel-head">
                     <div>
-                        <div class="eyebrow">Board</div>
+                        <div class="eyebrow">看板</div>
                         <h2 id="boardTitle">任务卡片</h2>
                     </div>
                     <div class="toolbar">
                         <button id="stopAgentBtn" type="button" class="secondary-btn">停止当前执行</button>
-                        <button id="closeAgentSessionBtn" type="button" class="danger-btn">清空当前任务</button>
+                        <button id="closeAgentSessionBtn" type="button" class="danger-btn">清空当前批量任务</button>
                     </div>
                 </div>
 
@@ -90,7 +90,7 @@
                 <div id="singleBoard" class="single-board hidden">
                     <div id="singleTaskCard" class="task-card single-card"></div>
                     <form id="agentComposerForm" class="composer">
-                        <textarea id="agentComposerInput" rows="4" placeholder="继续告诉 Agent 你想让这个窗口做什么"></textarea>
+                        <textarea id="agentComposerInput" rows="4" placeholder="继续告诉 Agent 这个窗口接下来要做什么"></textarea>
                         <button id="sendAgentMessageBtn" type="submit" class="primary-btn">发送</button>
                     </form>
                 </div>
@@ -99,10 +99,10 @@
             <aside class="panel detail-panel">
                 <div class="panel-head">
                     <div>
-                        <div class="eyebrow">Detail</div>
+                        <div class="eyebrow">详情</div>
                         <h2 id="detailTitle">任务详情</h2>
                     </div>
-                    <div id="detailBadge" class="detail-badge">等待选择</div>
+                    <div id="detailBadge" class="detail-badge">等待中</div>
                 </div>
 
                 <div class="summary-grid">
@@ -120,7 +120,7 @@
                     </div>
                 </div>
 
-                <div id="detailSummary" class="detail-summary">选择一张任务卡，查看它的执行步骤、摘要和错误信息。</div>
+                <div id="detailSummary" class="detail-summary">选择任务卡片后，可在这里查看步骤、摘要和错误信息。</div>
                 <div id="detailEventList" class="detail-event-list"></div>
             </aside>
         </div>

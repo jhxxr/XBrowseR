@@ -11,6 +11,7 @@ const { WebSocket } = require('ws');
 
 const { createStore } = require('./lib/store');
 const { createAgentController } = require('./lib/ai-agent');
+const { createEmptyAgentRuntimeState } = require('./lib/agent-runtime');
 const { createFingerprint } = require('./lib/fingerprint');
 const { parseProxyLink, parseSubscriptionContent, startCore, waitForMihomoReady, stopProcess, testProxyLatency, getBinaryPath } = require('./lib/mihomo');
 const { ensureBundledMihomo, MIHOMO_VERSION } = require('./lib/mihomo-download');
@@ -303,32 +304,6 @@ async function resolveLaunchFingerprint(profile, proxyPort = null) {
     return next;
 }
 
-async function resolveLaunchFingerprint(profile, proxyPort = null) {
-    const next = JSON.parse(JSON.stringify(profile.fingerprint || {}));
-    const needsLanguage = !next.language || next.language === 'auto';
-    const needsTimezone = !next.timezone || next.timezone === 'auto';
-
-    if (needsLanguage || needsTimezone) {
-        const geo = await fetchGeoInfo({ proxyPort });
-        const hasTimezone = !!geo?.timezone;
-        const hasLanguage = !!geo?.language;
-        if (!geo || (needsTimezone && !hasTimezone) || (needsLanguage && !hasLanguage)) {
-            throw new Error(proxyPort
-                ? '代理出口定位失败，无法自动确定语言和时区'
-                : '网络定位失败，无法自动确定语言和时区');
-        }
-
-        if (needsTimezone) next.timezone = geo.timezone;
-        if (needsLanguage) next.language = geo.language;
-    }
-
-    if (!Array.isArray(next.languages) || !next.languages.length || next.languages[0] === 'auto') {
-        next.languages = [next.language, next.language.split('-')[0]];
-    }
-
-    return next;
-}
-
 function proxyRecordFromParsed(proxy, meta = {}) {
     return {
         id: meta.id || uuidv4(),
@@ -375,6 +350,18 @@ function getAgentProviderByModel(model) {
     }
 
     return settings.agent.providers.find((provider) => provider.model === targetModel) || null;
+}
+
+function resolveRequestedAgentProvider(payload = {}) {
+    const provider = payload?.providerId
+        ? getAgentProvider(payload.providerId)
+        : getAgentProviderByModel(payload?.model);
+
+    if (!provider) {
+        throw new Error('所选模型没有匹配到可用的供应商配置');
+    }
+
+    return provider;
 }
 
 function formatKernelSummary(fingerprint = {}) {
@@ -431,20 +418,6 @@ function requestJsonFromLocal(url, timeout = 1200) {
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function waitForBrowserWindowReady(debugPort, timeoutMs = 15000) {
-    const startedAt = Date.now();
-
-    while (Date.now() - startedAt < timeoutMs) {
-        const targets = await requestJsonFromLocal(`http://127.0.0.1:${debugPort}/json/list`);
-        if (Array.isArray(targets) && targets.some(target => target?.type === 'page')) {
-            return true;
-        }
-        await sleep(180);
-    }
-
-    throw new Error('浏览器窗口未能在预期时间内完成启动');
 }
 
 async function waitForBrowserWindowReady(debugPort, timeoutMs = 15000) {
@@ -743,7 +716,7 @@ function buildState() {
                 label: item.label,
                 defaultBaseUrl: item.defaultBaseUrl
             })),
-            agent: agentController ? agentController.getPublicState() : { running: false },
+            agent: agentController ? agentController.getPublicState() : createEmptyAgentRuntimeState(),
             activeProvider: activeProvider ? {
                 id: activeProvider.id,
                 name: activeProvider.name,
@@ -843,144 +816,6 @@ async function clearProfileCache(profileId) {
         removed,
         cleared: removed.length
     };
-}
-
-async function openProfile(profileId, { requestId = '' } = {}) {
-    const profile = getProfile(profileId);
-    if (!profile) throw new Error('环境不存在');
-
-    const existing = runningProfiles.get(profileId);
-    if (existing?.browserPid) {
-        reportLaunchProgress(profile, requestId, 100, 'completed', '窗口已在运行', { done: true });
-        return existing;
-    }
-
-    reportLaunchProgress(profile, requestId, 6, 'prepare', '校验浏览器环境');
-
-    const browserBinary = resolveBrowserExecutable();
-    if (!browserBinary) {
-        reportLaunchProgress(profile, requestId, 0, 'error', '未找到 Chrome 或 Chromium', { error: true, done: true });
-        throw new Error('未找到 Chrome 或 Chromium 可执行文件');
-    }
-
-    if (!fs.existsSync(getBinaryPath(BASE_DIR))) {
-        reportLaunchProgress(profile, requestId, 10, 'mihomo-download', `下载 Mihomo ${MIHOMO_VERSION}`);
-        await ensureBundledMihomo(BASE_DIR);
-    }
-
-    let coreRuntime = null;
-    let mixedPort = null;
-    let controllerPort = null;
-    let debugPort = null;
-    const linkedProxy = profile.proxyId ? getProxy(profile.proxyId) : null;
-
-    try {
-        if (linkedProxy) {
-            reportLaunchProgress(profile, requestId, 14, 'proxy-start', '启动代理内核');
-            mixedPort = await getPort();
-            controllerPort = await getPort();
-            coreRuntime = await startCore({
-                baseDir: BASE_DIR,
-                runtimeDir: store.runtimeDir,
-                profileId: profile.id,
-                proxyInput: linkedProxy,
-                mixedPort,
-                controllerPort
-            });
-            await waitForMihomoReady({ mixedPort, controllerPort });
-            reportLaunchProgress(profile, requestId, 34, 'proxy-ready', '代理通道已就绪');
-        } else {
-            reportLaunchProgress(profile, requestId, 20, 'proxy-skip', '无需代理，直接启动');
-        }
-
-        reportLaunchProgress(profile, requestId, linkedProxy ? 40 : 32, 'fingerprint', '解析启动指纹');
-        const launchFingerprint = await resolveLaunchFingerprint(profile, mixedPort);
-
-        reportLaunchProgress(profile, requestId, linkedProxy ? 54 : 48, 'storage', '准备独立数据目录');
-        const userDataDir = path.join(store.dataDir, 'profiles', profile.id);
-        await fs.ensureDir(userDataDir);
-
-        reportLaunchProgress(profile, requestId, linkedProxy ? 68 : 62, 'extension', '生成指纹扩展');
-        const extensionDir = await ensureFingerprintExtension(BASE_DIR, profile.id, launchFingerprint);
-        const startUrl = isBuiltInStartUrl(profile.startUrl) ? getDefaultStartPageUrl(profile.id) : profile.startUrl;
-        debugPort = await getPort();
-        const runtime = {
-            browserPid: null,
-            browserBinary,
-            extensionDir,
-            corePid: coreRuntime?.process?.pid || null,
-            logFd: coreRuntime?.logFd,
-            port: mixedPort,
-            controllerPort,
-            debugPort,
-            url: startUrl,
-            launchFingerprint,
-            dashboardGeo: null
-        };
-
-        runningProfiles.set(profile.id, runtime);
-
-        const launchArgs = [
-            `--user-data-dir=${userDataDir}`,
-            `--window-size=${launchFingerprint.screen.width},${launchFingerprint.screen.height}`,
-            `--lang=${launchFingerprint.language || 'en-US'}`,
-            `--user-agent=${launchFingerprint.userAgent}`,
-            `--remote-debugging-port=${debugPort}`,
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-features=Translate,OptimizationHints,MediaRouter',
-            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-            `--disable-extensions-except=${extensionDir}`,
-            `--load-extension=${extensionDir}`,
-        ];
-
-        if (linkedProxy && mixedPort) {
-            launchArgs.push(`--proxy-server=socks5://127.0.0.1:${mixedPort}`);
-        }
-
-        launchArgs.push(startUrl);
-
-        reportLaunchProgress(profile, requestId, linkedProxy ? 80 : 76, 'spawn', '拉起浏览器进程');
-        const browserProcess = spawn(browserBinary, launchArgs, {
-            detached: process.platform !== 'win32',
-            stdio: 'ignore',
-            windowsHide: false
-        });
-
-        runtime.browserPid = browserProcess.pid;
-        browserProcess.unref();
-        browserProcess.on('exit', () => {
-            if (runningProfiles.has(profile.id)) {
-                stopProfile(profile.id).catch(() => { });
-            }
-        });
-
-        reportLaunchProgress(profile, requestId, linkedProxy ? 90 : 88, 'window-ready', '等待窗口真正打开');
-        await waitForBrowserWindowReady(debugPort);
-
-        profile.lastOpenedAt = Date.now();
-        profile.fingerprint = {
-            ...profile.fingerprint,
-            language: profile.fingerprint.language || 'auto',
-            timezone: profile.fingerprint.timezone || 'auto'
-        };
-        await store.saveProfiles(profiles);
-
-        notifyState();
-        reportLaunchProgress(profile, requestId, 100, 'completed', '窗口已打开', { done: true });
-        return runningProfiles.get(profile.id);
-    } catch (error) {
-        if (runningProfiles.has(profile.id)) {
-            await stopProfile(profile.id);
-        } else if (coreRuntime?.process?.pid) {
-            await stopProcess(coreRuntime.process.pid);
-            if (coreRuntime.logFd) {
-                try { fs.closeSync(coreRuntime.logFd); } catch (closeError) { }
-            }
-        }
-        reportLaunchProgress(profile, requestId, 0, 'error', error.message || '启动失败', { error: true, done: true });
-        throw error;
-    }
 }
 
 async function openProfile(profileId, { requestId = '' } = {}) {
@@ -1526,23 +1361,13 @@ app.whenReady().then(async () => {
 
         return merged;
     });
-    ipcMain.handle('agent:run', async (event, payload) => {
-        return agentController.runTask(payload || {});
-    });
     ipcMain.handle('agent:stop', async () => {
         return agentController.stopSession();
     });
     ipcMain.handle('agent:session:start', async (event, payload) => {
-        const provider = payload?.providerId
-            ? getAgentProvider(payload.providerId)
-            : getAgentProviderByModel(payload?.model);
-        if (!provider) {
-            throw new Error('未找到与模型对应的供应商配置');
-        }
-
         return agentController.createSession({
             profileId: payload?.profileId,
-            provider,
+            provider: resolveRequestedAgentProvider(payload),
             initialMessage: payload?.initialMessage || ''
         });
     });
@@ -1552,18 +1377,14 @@ app.whenReady().then(async () => {
         });
     });
     ipcMain.handle('agent:batch:start', async (event, payload) => {
-        const provider = payload?.providerId
-            ? getAgentProvider(payload.providerId)
-            : getAgentProviderByModel(payload?.model);
-        if (!provider) {
-            throw new Error('鏈壘鍒颁笌妯″瀷瀵瑰簲鐨勪緵搴斿晢閰嶇疆');
-        }
-
         return agentController.startBatchRun({
             profileIds: payload?.profileIds || [],
-            provider,
+            provider: resolveRequestedAgentProvider(payload),
             prompt: payload?.prompt || ''
         });
+    });
+    ipcMain.handle('agent:clear', async () => {
+        return agentController.closeSession();
     });
     ipcMain.handle('agent:session:close', async () => {
         return agentController.closeSession();

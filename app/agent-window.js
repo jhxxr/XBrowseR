@@ -1,3 +1,40 @@
+function createEmptyAgentRuntimeState() {
+    return window.xbrowser?.getEmptyAgentRuntimeState?.() || {
+        running: false,
+        mode: 'idle',
+        sessionId: '',
+        profileId: '',
+        profileName: '',
+        providerId: '',
+        providerName: '',
+        providerFormat: '',
+        model: '',
+        pageUrl: '',
+        events: [],
+        batch: {
+            running: false,
+            stopRequested: false,
+            jobId: '',
+            providerId: '',
+            providerName: '',
+            providerFormat: '',
+            model: '',
+            prompt: '',
+            currentTaskId: '',
+            counts: {
+                total: 0,
+                queued: 0,
+                running: 0,
+                success: 0,
+                error: 0,
+                stopped: 0,
+                completed: 0
+            },
+            tasks: []
+        }
+    };
+}
+
 let appState = {
     profiles: [],
     settings: {
@@ -5,7 +42,7 @@ let appState = {
     },
     runtime: {
         running: [],
-        agent: { running: false, events: [], batch: { running: false, tasks: [] } }
+        agent: createEmptyAgentRuntimeState()
     }
 };
 
@@ -93,46 +130,29 @@ function getActiveProvider() {
 }
 
 function getAgentRuntime() {
-    return appState.runtime.agent || {
-        running: false,
-        sessionId: '',
-        profileId: '',
-        profileName: '',
-        providerId: '',
-        providerName: '',
-        providerFormat: '',
-        model: '',
-        pageUrl: '',
-        events: [],
-        batch: {
-            running: false,
-            tasks: []
-        }
-    };
+    return appState.runtime.agent || createEmptyAgentRuntimeState();
+}
+
+function hasLockedAgentMode(runtimeAgent = getAgentRuntime(), batch = getBatchState()) {
+    return !!runtimeAgent.sessionId || runtimeAgent.running || batch.running || (batch.tasks || []).length > 0;
+}
+
+function syncAgentModeFromRuntime() {
+    const runtimeAgent = getAgentRuntime();
+    const batch = getBatchState();
+
+    if (batch.running || (batch.tasks || []).length || runtimeAgent.mode === 'batch') {
+        agentMode = 'batch';
+        return;
+    }
+
+    if (runtimeAgent.sessionId || runtimeAgent.running || runtimeAgent.mode === 'single') {
+        agentMode = 'single';
+    }
 }
 
 function getBatchState() {
-    return getAgentRuntime().batch || {
-        running: false,
-        stopRequested: false,
-        jobId: '',
-        providerId: '',
-        providerName: '',
-        providerFormat: '',
-        model: '',
-        prompt: '',
-        currentTaskId: '',
-        counts: {
-            total: 0,
-            queued: 0,
-            running: 0,
-            success: 0,
-            error: 0,
-            stopped: 0,
-            completed: 0
-        },
-        tasks: []
-    };
+    return getAgentRuntime().batch || createEmptyAgentRuntimeState().batch;
 }
 
 function getBatchCounts(batch = getBatchState()) {
@@ -167,7 +187,7 @@ async function runUiAction(action) {
         await action();
     } catch (error) {
         console.error('[agent-window]', error);
-        showToast(error?.message || 'Operation failed');
+        showToast(error?.message || '操作失败');
     }
 }
 
@@ -177,7 +197,7 @@ function getAgentModelChoices() {
         .map((provider) => ({
             value: provider.id,
             label: provider.name && provider.name !== provider.model
-                ? `${provider.model} · ${provider.name}`
+                ? `${provider.model} / ${provider.name}`
                 : provider.model
         }));
 }
@@ -187,6 +207,23 @@ function getSelectedTask() {
         return null;
     }
     return getBatchState().tasks.find((task) => task.id === selectedTaskId) || null;
+}
+
+function getTaskStatusLabel(status) {
+    switch (status) {
+    case 'ready':
+        return '待命中';
+    case 'running':
+        return '执行中';
+    case 'success':
+        return '成功';
+    case 'error':
+        return '失败';
+    case 'stopped':
+        return '已停止';
+    default:
+        return '待执行';
+    }
 }
 
 function getSingleTaskSummary(runtimeAgent) {
@@ -200,11 +237,18 @@ function getSingleTaskSummary(runtimeAgent) {
         .find((entry) => entry.kind === 'status');
 
     return {
-        title: runtimeAgent.profileName || '未启动会话',
-        status: runtimeAgent.running ? 'running' : (runtimeAgent.sessionId ? 'success' : 'queued'),
-        summary: lastAssistant?.content || lastStatus?.message || '启动单窗口会话后，这里会显示执行摘要。',
-        pageUrl: runtimeAgent.pageUrl || '-'
+        title: runtimeAgent.profileName || '当前没有活动会话',
+        status: runtimeAgent.running ? 'running' : (runtimeAgent.sessionId ? 'ready' : 'queued'),
+        summary: lastAssistant?.content || lastStatus?.message || '启动单窗口会话后，这里会显示最近一次执行摘要。',
+        pageUrl: runtimeAgent.pageUrl || '-',
     };
+}
+
+function canClearAgentState(runtimeAgent = getAgentRuntime(), batch = getBatchState()) {
+    if (runtimeAgent.running || batch.running) {
+        return false;
+    }
+    return !!runtimeAgent.sessionId || !!batch.tasks.length;
 }
 
 function syncSelections() {
@@ -218,128 +262,10 @@ function syncSelections() {
     }
 }
 
-function renderMode() {
-    const isBatch = agentMode === 'batch';
-    modeBatchBtn.classList.toggle('active', isBatch);
-    modeSingleBtn.classList.toggle('active', !isBatch);
-    batchModeSection.classList.toggle('hidden', !isBatch);
-    singleModeSection.classList.toggle('hidden', isBatch);
-    batchBoard.classList.toggle('hidden', !isBatch);
-    singleBoard.classList.toggle('hidden', isBatch);
-
-    launchTitle.textContent = isBatch ? '批量任务启动器' : '单窗口高级会话';
-    launchMeta.textContent = isBatch ? '多窗口是第一公民' : '精细接管单个窗口';
-    boardTitle.textContent = isBatch ? '任务卡片' : '当前会话';
-}
-
-function renderLaunchOptions() {
-    const runtimeAgent = getAgentRuntime();
-    const batch = getBatchState();
-    const modelChoices = getAgentModelChoices();
-    const selectedModel = modelChoices.some((item) => item.value === agentLaunchModelSelect.value)
-        ? agentLaunchModelSelect.value
-        : (batch.providerId || runtimeAgent.providerId || getActiveProvider()?.id || modelChoices[0]?.value || '');
-
-    if (!modelChoices.length) {
-        agentLaunchModelSelect.innerHTML = '<option value="">暂无可用模型</option>';
-        agentLaunchModelSelect.value = '';
-    } else {
-        agentLaunchModelSelect.innerHTML = modelChoices.map((choice) => `
-            <option value="${choice.value}">${escapeHtml(choice.label)}</option>
-        `).join('');
-        agentLaunchModelSelect.value = selectedModel;
-    }
-
-    const selectedProfile = appState.profiles.some((item) => item.id === agentLaunchProfileSelect.value)
-        ? agentLaunchProfileSelect.value
-        : (runtimeAgent.profileId || appState.profiles[0]?.id || '');
-
-    if (!appState.profiles.length) {
-        agentLaunchProfileSelect.innerHTML = '<option value="">暂无窗口</option>';
-        agentLaunchProfileSelect.value = '';
-    } else {
-        agentLaunchProfileSelect.innerHTML = appState.profiles.map((profile) => {
-            const runtime = getRunning(profile.id);
-            const suffix = runtime ? ' · 已运行' : ' · 可自动启动';
-            return `<option value="${profile.id}">${escapeHtml(profile.name)}${suffix}</option>`;
-        }).join('');
-        agentLaunchProfileSelect.value = selectedProfile;
-    }
-
-    batchProfileGrid.innerHTML = appState.profiles.length
-        ? appState.profiles.map((profile) => {
-            const checked = selectedBatchProfileIds.has(profile.id) ? 'checked' : '';
-            const runtime = getRunning(profile.id);
-            return `
-                <label class="profile-option">
-                    <div class="profile-option-head">
-                        <div class="profile-option-title">${escapeHtml(profile.name)}</div>
-                        <input type="checkbox" data-profile-id="${profile.id}" ${checked}>
-                    </div>
-                    <div class="profile-option-meta">
-                        ${runtime ? '运行中，可直接接管' : '未运行，将由 Agent 自动拉起'}<br>
-                        ${escapeHtml(profile.startUrl || '使用默认起始页')}
-                    </div>
-                </label>
-            `;
-        }).join('')
-        : '<div class="detail-summary">暂无窗口，请先在主界面创建指纹窗口。</div>';
-
-    startBatchBtn.disabled = !modelChoices.length || !appState.profiles.length;
-    startSingleSessionBtn.disabled = !modelChoices.length || !appState.profiles.length;
-}
-
-function renderStatus() {
-    const runtimeAgent = getAgentRuntime();
-    const batch = getBatchState();
-
-    if (batch.running) {
-        agentStatusBadge.textContent = '批量执行中';
-    } else if (batch.tasks.length) {
-        agentStatusBadge.textContent = '批量任务待命';
-    } else if (runtimeAgent.running) {
-        agentStatusBadge.textContent = '单窗口执行中';
-    } else if (runtimeAgent.sessionId) {
-        agentStatusBadge.textContent = '单窗口会话待命';
-    } else {
-        agentStatusBadge.textContent = '空闲';
-    }
-
-    stopAgentBtn.disabled = !runtimeAgent.running && !batch.running;
-    closeAgentSessionBtn.disabled = !runtimeAgent.sessionId && !batch.tasks.length;
-    sendAgentMessageBtn.disabled = agentMode !== 'single' || !runtimeAgent.sessionId || runtimeAgent.running || batch.running;
-    agentComposerInput.disabled = sendAgentMessageBtn.disabled;
-}
-
-function renderBatchBoard() {
-    const batch = getBatchState();
-    if (!batch.tasks.length) {
-        batchBoard.innerHTML = '<div class="detail-summary">输入一条批量任务说明，选择多个窗口后启动。每个窗口都会生成独立任务卡。</div>';
-        return;
-    }
-
-    batchBoard.innerHTML = batch.tasks.map((task, index) => `
-        <article class="task-card ${task.id === selectedTaskId ? 'active' : ''}" data-task-id="${task.id}">
-            <div class="task-card-head">
-                <div class="task-card-title">
-                    <strong>Task ${index + 1} · ${escapeHtml(task.profileName)}</strong>
-                    <div class="task-card-subtitle">${escapeHtml(task.pageUrl || '等待执行')}</div>
-                </div>
-                <span class="task-status ${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>
-            </div>
-            <div class="task-summary">${escapeHtml(task.summary || task.lastMessage || '等待模型规划')}</div>
-            <div class="task-meta-row">
-                <span class="task-chip">耗时 ${escapeHtml(formatDuration(task.durationMs))}</span>
-                <span class="task-chip">事件 ${escapeHtml(String(task.events.length))}</span>
-                <span class="task-chip">${escapeHtml(task.error ? '存在错误' : '可展开详情')}</span>
-            </div>
-        </article>
-    `).join('');
-}
-
 function renderSingleBoard() {
     const runtimeAgent = getAgentRuntime();
     const summary = getSingleTaskSummary(runtimeAgent);
+    const statusLabel = getTaskStatusLabel(summary.status);
 
     singleTaskCard.innerHTML = `
         <div class="task-card-head">
@@ -347,7 +273,7 @@ function renderSingleBoard() {
                 <strong>${escapeHtml(summary.title)}</strong>
                 <div class="task-card-subtitle">${escapeHtml(summary.pageUrl)}</div>
             </div>
-            <span class="task-status ${escapeHtml(summary.status)}">${escapeHtml(summary.status)}</span>
+            <span class="task-status ${escapeHtml(summary.status)}">${escapeHtml(statusLabel)}</span>
         </div>
         <div class="task-summary">${escapeHtml(summary.summary)}</div>
         <div class="task-meta-row">
@@ -366,97 +292,59 @@ function getDetailPayload() {
         if (!task) {
             return {
                 title: '任务详情',
-                badge: batch.running ? '执行中' : '等待选择',
-                summary: '选择一张任务卡，查看它的执行步骤、摘要和错误信息。',
+                badge: batch.running ? '执行中' : '等待中',
+                summary: '选择任务卡片后，可在这里查看步骤、摘要和错误信息。',
                 model: batch.model || runtimeAgent.model || '-',
                 profile: '-',
                 page: '-',
-                events: []
+                events: [],
             };
         }
 
         return {
             title: task.profileName,
-            badge: task.status,
-            summary: task.summary || task.error || task.lastMessage || '暂无摘要',
+            badge: getTaskStatusLabel(task.status),
+            summary: task.summary || task.error || task.lastMessage || '暂时还没有摘要',
             model: batch.model || runtimeAgent.model || '-',
             profile: task.profileName,
             page: task.pageUrl || '-',
-            events: task.events
+            events: task.events,
         };
     }
 
     return {
         title: runtimeAgent.profileName || '单窗口会话',
-        badge: runtimeAgent.running ? '执行中' : (runtimeAgent.sessionId ? '待命' : '未启动'),
+        badge: runtimeAgent.running ? '执行中' : (runtimeAgent.sessionId ? '待命中' : '未启动'),
         summary: getSingleTaskSummary(runtimeAgent).summary,
         model: runtimeAgent.model || getActiveProvider()?.model || '-',
         profile: runtimeAgent.profileName || '-',
         page: runtimeAgent.pageUrl || '-',
-        events: runtimeAgent.events
+        events: runtimeAgent.events,
     };
 }
 
-function renderDetail() {
-    const detail = getDetailPayload();
-    detailTitle.textContent = detail.title;
-    detailBadge.textContent = detail.badge;
-    agentCurrentModelEl.textContent = detail.model;
-    agentCurrentProfileEl.textContent = detail.profile;
-    agentCurrentPageEl.textContent = detail.page;
-    detailSummary.textContent = detail.summary;
-
-    if (!detail.events.length) {
-        detailEventList.innerHTML = '<div class="detail-summary">这里会显示任务步骤、工具调用和状态变化。</div>';
-        return;
-    }
-
-    detailEventList.innerHTML = detail.events.map((entry) => {
-        let type = '';
-        let label = '状态';
-        let body = entry.message || '';
-
-        if (entry.kind === 'message' && entry.role === 'user') {
-            type = 'user';
-            label = '你';
-            body = entry.content || '';
-        } else if (entry.kind === 'message' && entry.role === 'assistant') {
-            type = 'assistant';
-            label = 'Agent';
-            body = entry.content || '';
-        } else if (entry.kind === 'tool') {
-            type = 'tool';
-            label = '工具';
-        } else if (entry.level === 'error') {
-            type = 'error';
-        }
-
-        return `
-            <article class="detail-event ${type}">
-                <div class="detail-event-meta">
-                    <span>${escapeHtml(label)}</span>
-                    <span>${escapeHtml(formatDate(entry.createdAt))}</span>
-                </div>
-                <div class="detail-event-body">${escapeHtml(body)}</div>
-            </article>
-        `;
-    }).join('');
-}
-
 function renderMode() {
+    const runtimeAgent = getAgentRuntime();
+    const batch = getBatchState();
     const isBatch = agentMode === 'batch';
+    const modeLocked = hasLockedAgentMode(runtimeAgent, batch);
+
     modeBatchBtn.classList.toggle('active', isBatch);
     modeSingleBtn.classList.toggle('active', !isBatch);
+    modeBatchBtn.disabled = modeLocked;
+    modeSingleBtn.disabled = modeLocked;
+    modeBatchBtn.title = modeLocked ? '请先结束当前会话或清空当前批量任务，再切换模式' : '';
+    modeSingleBtn.title = modeLocked ? '请先结束当前会话或清空当前批量任务，再切换模式' : '';
     batchModeSection.classList.toggle('hidden', !isBatch);
     singleModeSection.classList.toggle('hidden', isBatch);
     batchOverview.classList.toggle('hidden', !isBatch);
     batchBoard.classList.toggle('hidden', !isBatch);
     singleBoard.classList.toggle('hidden', isBatch);
 
-    launchTitle.textContent = isBatch ? '批量任务启动器' : '单窗口高级会话';
-    launchMeta.textContent = isBatch ? '多窗口是第一公民' : '精细接管单个窗口';
+    launchTitle.textContent = isBatch ? '批量启动器' : '单窗口会话';
+    launchMeta.textContent = isBatch ? '以多窗口调度为主' : '聚焦单个窗口的持续控制';
     boardTitle.textContent = isBatch ? '任务卡片' : '当前会话';
-    closeAgentSessionBtn.textContent = isBatch ? '清空当前任务' : '结束当前会话';
+    closeAgentSessionBtn.textContent = isBatch ? '清空当前批量任务' : '结束当前会话';
 }
 
 function renderLaunchOptions() {
@@ -483,12 +371,12 @@ function renderLaunchOptions() {
         : (runtimeAgent.profileId || appState.profiles[0]?.id || '');
 
     if (!appState.profiles.length) {
-        agentLaunchProfileSelect.innerHTML = '<option value="">暂无窗口</option>';
+        agentLaunchProfileSelect.innerHTML = '<option value="">暂无环境</option>';
         agentLaunchProfileSelect.value = '';
     } else {
         agentLaunchProfileSelect.innerHTML = appState.profiles.map((profile) => {
             const runtime = getRunning(profile.id);
-            const suffix = runtime ? ' · 已运行' : ' · 可自动启动';
+            const suffix = runtime ? ' / 运行中' : ' / 将自动启动';
             return `<option value="${profile.id}">${escapeHtml(profile.name)}${suffix}</option>`;
         }).join('');
         agentLaunchProfileSelect.value = selectedProfile;
@@ -505,13 +393,13 @@ function renderLaunchOptions() {
                         <input type="checkbox" data-profile-id="${profile.id}" ${checked}>
                     </div>
                     <div class="profile-option-meta">
-                        ${runtime ? '运行中，可直接接管' : '未运行，将由 Agent 自动拉起'}<br>
+                        ${runtime ? '窗口已在运行，可直接接管' : '窗口未启动，Agent 会自动拉起'}<br>
                         ${escapeHtml(profile.startUrl || '使用默认起始页')}
                     </div>
                 </label>
             `;
         }).join('')
-        : '<div class="detail-summary">暂无窗口，请先在主界面创建指纹窗口。</div>';
+        : '<div class="detail-summary">还没有浏览器环境，请先在主界面创建环境。</div>';
 
     startBatchBtn.disabled = busy || !modelChoices.length || !appState.profiles.length;
     startSingleSessionBtn.disabled = busy || !modelChoices.length || !appState.profiles.length;
@@ -522,9 +410,9 @@ function renderStatus() {
     const batch = getBatchState();
 
     if (batch.running) {
-        agentStatusBadge.textContent = batch.stopRequested ? '批量停止中' : '批量执行中';
+        agentStatusBadge.textContent = batch.stopRequested ? '正在停止批量任务' : '批量任务执行中';
     } else if (batch.tasks.length) {
-        agentStatusBadge.textContent = '批量任务待命';
+        agentStatusBadge.textContent = '批量任务待清空';
     } else if (runtimeAgent.running) {
         agentStatusBadge.textContent = '单窗口执行中';
     } else if (runtimeAgent.sessionId) {
@@ -536,18 +424,21 @@ function renderStatus() {
     if (agentMode === 'batch') {
         const counts = getBatchCounts(batch);
         boardMeta.textContent = batch.tasks.length
-            ? `总 ${counts.total} · 运行 ${counts.running} · 成功 ${counts.success} · 异常 ${counts.error} · 停止 ${counts.stopped}`
-            : '默认面向多窗口任务编排';
+            ? `总数 ${counts.total} / 执行中 ${counts.running} / 成功 ${counts.success} / 失败 ${counts.error} / 已停止 ${counts.stopped}`
+            : '用于多窗口任务编排';
     } else {
         boardMeta.textContent = runtimeAgent.sessionId
-            ? '持续对话模式，适合精细接管单个窗口'
-            : '高级模式，仅操作一个窗口';
+            ? '面向单个受控窗口的持续会话模式'
+            : '高级模式，聚焦接管单个窗口';
     }
 
     stopAgentBtn.disabled = !runtimeAgent.running && !batch.running;
-    closeAgentSessionBtn.disabled = !runtimeAgent.sessionId && !batch.tasks.length;
+    closeAgentSessionBtn.disabled = !canClearAgentState(runtimeAgent, batch);
     sendAgentMessageBtn.disabled = agentMode !== 'single' || !runtimeAgent.sessionId || runtimeAgent.running || batch.running;
     agentComposerInput.disabled = sendAgentMessageBtn.disabled;
+    agentComposerInput.placeholder = sendAgentMessageBtn.disabled
+        ? '请先启动单窗口会话，或等待当前执行完成'
+        : '继续告诉 Agent 这个窗口接下来要做什么';
 }
 
 function renderBatchOverview() {
@@ -560,23 +451,23 @@ function renderBatchOverview() {
     const counts = getBatchCounts(batch);
     batchOverview.innerHTML = `
         <div class="overview-card">
-            <div class="overview-label">Total</div>
+            <div class="overview-label">总数</div>
             <div class="overview-value">${counts.total}</div>
         </div>
         <div class="overview-card">
-            <div class="overview-label">Running</div>
+            <div class="overview-label">执行中</div>
             <div class="overview-value running">${counts.running}</div>
         </div>
         <div class="overview-card">
-            <div class="overview-label">Success</div>
+            <div class="overview-label">成功</div>
             <div class="overview-value success">${counts.success}</div>
         </div>
         <div class="overview-card">
-            <div class="overview-label">Error</div>
+            <div class="overview-label">失败</div>
             <div class="overview-value error">${counts.error}</div>
         </div>
         <div class="overview-card">
-            <div class="overview-label">Stopped</div>
+            <div class="overview-label">已停止</div>
             <div class="overview-value stopped">${counts.stopped}</div>
         </div>
     `;
@@ -585,7 +476,7 @@ function renderBatchOverview() {
 function renderBatchBoard() {
     const batch = getBatchState();
     if (!batch.tasks.length) {
-        batchBoard.innerHTML = '<div class="detail-summary">输入一条批量任务说明，选择多个窗口后启动。每个窗口都会生成独立任务卡。</div>';
+        batchBoard.innerHTML = '<div class="detail-summary">填写批量任务说明，选择多个窗口后启动。每个窗口都会生成独立任务卡片。</div>';
         return;
     }
 
@@ -593,16 +484,16 @@ function renderBatchBoard() {
         <article class="task-card ${task.id === selectedTaskId ? 'active' : ''}" data-task-id="${task.id}">
             <div class="task-card-head">
                 <div class="task-card-title">
-                    <strong>Task ${index + 1} · ${escapeHtml(task.profileName)}</strong>
+                    <strong>任务 ${index + 1} / ${escapeHtml(task.profileName)}</strong>
                     <div class="task-card-subtitle">${escapeHtml(task.pageUrl || '等待执行')}</div>
                 </div>
-                <span class="task-status ${escapeHtml(task.status)}">${escapeHtml(task.status)}</span>
+                <span class="task-status ${escapeHtml(task.status)}">${escapeHtml(getTaskStatusLabel(task.status))}</span>
             </div>
             <div class="task-summary">${escapeHtml(task.summary || task.lastMessage || '等待模型规划')}</div>
             <div class="task-meta-row">
                 <span class="task-chip">耗时 ${escapeHtml(formatDuration(task.durationMs))}</span>
                 <span class="task-chip">事件 ${escapeHtml(String(task.events.length))}</span>
-                <span class="task-chip">${escapeHtml(task.error ? '存在错误' : '可展开详情')}</span>
+                <span class="task-chip">${escapeHtml(task.error ? '含错误' : '可查看详情')}</span>
             </div>
         </article>
     `).join('');
@@ -618,7 +509,7 @@ function renderDetail() {
     detailSummary.textContent = detail.summary;
 
     if (!detail.events.length) {
-        detailEventList.innerHTML = '<div class="detail-summary">这里会显示任务步骤、工具调用和状态变化。</div>';
+        detailEventList.innerHTML = '<div class="detail-summary">任务步骤、工具调用和状态变化会显示在这里。</div>';
         return;
     }
 
@@ -657,6 +548,7 @@ function renderDetail() {
 }
 
 function renderAll() {
+    syncAgentModeFromRuntime();
     syncSelections();
     renderMode();
     renderLaunchOptions();
@@ -668,11 +560,13 @@ function renderAll() {
 }
 
 modeBatchBtn.addEventListener('click', () => {
+    if (modeBatchBtn.disabled) return;
     agentMode = 'batch';
     renderAll();
 });
 
 modeSingleBtn.addEventListener('click', () => {
+    if (modeSingleBtn.disabled) return;
     agentMode = 'single';
     renderAll();
 });
@@ -703,85 +597,11 @@ clearSelectedProfilesBtn.addEventListener('click', () => {
     renderLaunchOptions();
 });
 
-startBatchBtn.addEventListener('click', async () => {
-    const providerId = agentLaunchModelSelect.value;
-    const prompt = agentBatchPromptInput.value.trim();
-    const profileIds = Array.from(selectedBatchProfileIds);
-
-    if (!providerId) {
-        showToast('请先选择模型。');
-        return;
-    }
-    if (!profileIds.length) {
-        showToast('请至少选择一个窗口。');
-        return;
-    }
-    if (!prompt) {
-        showToast('请输入批量任务说明。');
-        return;
-    }
-
-    await window.xbrowser.startAgentBatch({
-        providerId,
-        profileIds,
-        prompt
-    });
-    showToast('批量任务已启动。');
-});
-
-startSingleSessionBtn.addEventListener('click', async () => {
-    const providerId = agentLaunchModelSelect.value;
-    const profileId = agentLaunchProfileSelect.value;
-    const initialMessage = agentLaunchMessageInput.value.trim();
-
-    if (!providerId) {
-        showToast('请先选择模型。');
-        return;
-    }
-    if (!profileId) {
-        showToast('请选择目标窗口。');
-        return;
-    }
-
-    await window.xbrowser.startAgentSession({
-        providerId,
-        profileId,
-        initialMessage
-    });
-    agentMode = 'single';
-    agentLaunchMessageInput.value = '';
-    showToast('单窗口会话已启动。');
-});
-
 batchBoard.addEventListener('click', (event) => {
     const card = event.target.closest('[data-task-id]');
     if (!card) return;
     selectedTaskId = card.dataset.taskId;
     renderAll();
-});
-
-agentComposerForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-
-    const message = agentComposerInput.value.trim();
-    if (!message) {
-        showToast('消息不能为空。');
-        return;
-    }
-
-    await window.xbrowser.sendAgentSessionMessage({ message });
-    agentComposerInput.value = '';
-});
-
-stopAgentBtn.addEventListener('click', async () => {
-    await window.xbrowser.stopAgentTask();
-});
-
-closeAgentSessionBtn.addEventListener('click', async () => {
-    if (!window.confirm('确定清空当前任务或会话吗？这不会关闭真实浏览器窗口。')) return;
-    await window.xbrowser.closeAgentSession();
-    selectedTaskId = '';
-    showToast('当前 Agent 任务已清空。');
 });
 
 function interceptUiEvent(element, eventName, handler) {
@@ -806,7 +626,7 @@ interceptUiEvent(startBatchBtn, 'click', async () => {
         return;
     }
     if (!prompt) {
-        showToast('请输入批量任务说明。');
+        showToast('请填写批量任务说明。');
         return;
     }
 
@@ -815,6 +635,7 @@ interceptUiEvent(startBatchBtn, 'click', async () => {
         profileIds,
         prompt
     });
+    agentMode = 'batch';
     showToast('批量任务已启动。');
 });
 
@@ -856,17 +677,20 @@ interceptUiEvent(agentComposerForm, 'submit', async () => {
 interceptUiEvent(stopAgentBtn, 'click', async () => {
     const stopped = await window.xbrowser.stopAgentTask();
     if (!stopped) {
-        showToast('当前没有可停止的执行。');
+        showToast('当前没有正在执行的任务。');
         return;
     }
-    showToast(agentMode === 'batch' ? '正在停止批量任务。' : '正在停止当前操作。');
+    showToast(agentMode === 'batch' ? '正在停止批量任务。' : '正在停止当前执行。');
 });
 
 interceptUiEvent(closeAgentSessionBtn, 'click', async () => {
-    if (!window.confirm('确定清空当前任务或会话吗？这不会关闭真实浏览器窗口。')) return;
-    await window.xbrowser.closeAgentSession();
+    const message = agentMode === 'batch'
+        ? '确认清空当前批量任务吗？这不会关闭真实浏览器窗口。'
+        : '确认结束当前会话吗？这不会关闭真实浏览器窗口。';
+    if (!window.confirm(message)) return;
+    await window.xbrowser.clearAgentState();
     selectedTaskId = '';
-    showToast('当前 Agent 任务已清空。');
+    showToast(agentMode === 'batch' ? '当前批量任务已清空。' : '当前会话已结束。');
 });
 
 window.addEventListener('unhandledrejection', (event) => {

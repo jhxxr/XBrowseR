@@ -1,7 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const { createEmptyAgentRuntimeState } = require('./lib/agent-runtime');
 
 contextBridge.exposeInMainWorld('xbrowser', {
     bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
+    getEmptyAgentRuntimeState: () => createEmptyAgentRuntimeState(),
     openAgentWindow: () => ipcRenderer.invoke('agent:window:open'),
     generateFingerprint: (payload) => ipcRenderer.invoke('fingerprint:generate', payload),
     saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload),
@@ -20,12 +22,11 @@ contextBridge.exposeInMainWorld('xbrowser', {
     deleteAgentProvider: (id) => ipcRenderer.invoke('agent:provider:delete', id),
     setActiveAgentProvider: (id) => ipcRenderer.invoke('agent:provider:set-active', id),
     fetchAgentModels: (payload) => ipcRenderer.invoke('agent:provider:fetch-models', payload),
-    runAgentTask: (payload) => ipcRenderer.invoke('agent:run', payload),
     stopAgentTask: () => ipcRenderer.invoke('agent:stop'),
     startAgentSession: (payload) => ipcRenderer.invoke('agent:session:start', payload),
     sendAgentSessionMessage: (payload) => ipcRenderer.invoke('agent:session:send', payload),
     startAgentBatch: (payload) => ipcRenderer.invoke('agent:batch:start', payload),
-    closeAgentSession: () => ipcRenderer.invoke('agent:session:close'),
+    clearAgentState: () => ipcRenderer.invoke('agent:clear'),
     saveSettings: (payload) => ipcRenderer.invoke('settings:save', payload),
     openDataDir: () => ipcRenderer.invoke('app:open-data-dir'),
     onStateUpdated: (callback) => ipcRenderer.on('state-updated', (event, state) => callback(state)),
