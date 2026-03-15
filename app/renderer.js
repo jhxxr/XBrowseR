@@ -4,9 +4,14 @@ let appState = {
         proxies: [],
         subscriptions: [],
         api: { enabled: true, port: 23919 },
+        agent: { providers: [], activeProviderId: '', toolTimeoutMs: 20000 },
         ui: { activeView: 'home' }
     },
-    runtime: { running: [] }
+    runtime: {
+        running: [],
+        providerFormats: [],
+        agent: { running: false }
+    }
 };
 
 const toastEl = document.getElementById('toast');
@@ -19,15 +24,51 @@ const proxyTableBody = document.getElementById('proxyTableBody');
 const subscriptionList = document.getElementById('subscriptionList');
 const fingerprintPreview = document.getElementById('fingerprintPreview');
 
+const agentProviderForm = document.getElementById('agentProviderForm');
+const agentProviderList = document.getElementById('agentProviderList');
+const agentLaunchDialog = document.getElementById('agentLaunchDialog');
+const agentLaunchForm = document.getElementById('agentLaunchForm');
+const agentLaunchModelSelect = document.getElementById('agentLaunchModel');
+const agentLaunchProfileSelect = document.getElementById('agentLaunchProfile');
+const agentLaunchMessageInput = document.getElementById('agentLaunchMessage');
+const agentComposerForm = document.getElementById('agentComposerForm');
+const agentComposerInput = document.getElementById('agentComposerInput');
+const sendAgentMessageBtn = document.getElementById('sendAgentMessageBtn');
+const stopAgentBtn = document.getElementById('stopAgentBtn');
+const closeAgentSessionBtn = document.getElementById('closeAgentSessionBtn');
+const openAgentLaunchDialogBtn = document.getElementById('openAgentLaunchDialogBtn');
+const closeAgentLaunchDialogBtn = document.getElementById('closeAgentLaunchDialogBtn');
+const agentCurrentProviderEl = document.getElementById('agentCurrentProvider');
+const agentRuntimeCard = document.getElementById('agentRuntimeCard');
+const agentConversationList = document.getElementById('agentConversationList');
+const agentActiveProviderBadge = document.getElementById('agentActiveProviderBadge');
+const providerModelsHint = document.getElementById('providerModelsHint');
+const agentFormatDocs = document.getElementById('agentFormatDocs');
+const agentToolTimeoutInput = document.getElementById('agentToolTimeoutMs');
+const agentProfileSelect = document.getElementById('agentProfileSelect');
+const agentCurrentProviderInput = document.getElementById('agentCurrentProviderInput');
+const agentLogList = document.getElementById('agentLogList');
+
 let homeFilter = 'all';
 let homeSearch = '';
 let currentFingerprintDraft = {};
+let agentDraftModels = [];
+let agentLogs = [];
 
 const launchProgressByProfileId = new Map();
 const launchCleanupTimers = new Map();
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function isBuiltInStartUrl(url) {
@@ -83,6 +124,31 @@ function getRunning(profileId) {
     return appState.runtime.running.find((item) => item.id === profileId);
 }
 
+function getProviderFormats() {
+    return appState.runtime.providerFormats || [];
+}
+
+function getAgentProviders() {
+    return appState.settings.agent?.providers || [];
+}
+
+function getActiveProvider() {
+    const activeId = appState.settings.agent?.activeProviderId || '';
+    return getAgentProviders().find((item) => item.id === activeId) || getAgentProviders()[0] || null;
+}
+
+function getAgentToolTimeoutMs() {
+    return Math.max(5000, Math.min(60000, Number(appState.settings.agent?.toolTimeoutMs) || 20000));
+}
+
+function getProviderFormatMeta(format) {
+    return getProviderFormats().find((item) => item.value === format) || {
+        value: format,
+        label: format,
+        defaultBaseUrl: ''
+    };
+}
+
 function upsertLaunchProgress(profileId, patch) {
     const current = launchProgressByProfileId.get(profileId) || {};
     launchProgressByProfileId.set(profileId, { ...current, ...patch });
@@ -112,6 +178,16 @@ function scheduleLaunchProgressCleanup(profileId, delayMs) {
     launchCleanupTimers.set(profileId, timer);
 }
 
+function mountAgentSettingsFields() {
+    const timeoutFieldWrap = agentToolTimeoutInput?.closest('.grid.two');
+    const formActions = agentProviderForm?.querySelector('.form-actions');
+    if (!timeoutFieldWrap || !formActions || timeoutFieldWrap.parentElement === agentProviderForm) {
+        return;
+    }
+
+    agentProviderForm.insertBefore(timeoutFieldWrap, formActions);
+}
+
 function renderLaunchProgressInline(profileId) {
     const launchState = launchProgressByProfileId.get(profileId);
     if (!launchState) {
@@ -125,7 +201,7 @@ function renderLaunchProgressInline(profileId) {
     return `
         <div class="${wrapClass}">
             <div class="launch-inline-top">
-                <span class="launch-inline-label">${label}</span>
+                <span class="launch-inline-label">${escapeHtml(label)}</span>
                 <span class="launch-inline-percent">${progress}%</span>
             </div>
             <div class="launch-inline-bar">
@@ -142,9 +218,15 @@ function renderStats() {
     document.getElementById('sidebarRuntime').textContent = appState.runtime.mihomoReady
         ? `Mihomo 已就绪 · 运行中 ${appState.runtime.running.length} 个`
         : 'Mihomo 内核缺失';
-    document.getElementById('topbarHint').textContent = appState.runtime.apiUrl
-        ? `API ${appState.runtime.apiUrl}`
-        : 'API 未启用';
+
+    if (appState.runtime.agent?.running) {
+        document.getElementById('topbarHint').textContent = 'Agent 任务执行中';
+        return;
+    }
+
+    document.getElementById('topbarHint').textContent = appState.runtime.activeProvider
+        ? `Agent ${appState.runtime.activeProvider.name}`
+        : (appState.runtime.apiUrl ? `API ${appState.runtime.apiUrl}` : 'API 未启用');
 }
 
 function renderProxySelect() {
@@ -152,8 +234,100 @@ function renderProxySelect() {
     const proxies = appState.settings.proxies || [];
     select.innerHTML = '<option value="">直连</option>' + proxies.map((proxy) => {
         const latency = proxy.latency > 0 ? ` · ${proxy.latency}ms` : '';
-        return `<option value="${proxy.id}">${proxy.name}${latency}</option>`;
+        return `<option value="${proxy.id}">${escapeHtml(proxy.name)}${latency}</option>`;
     }).join('');
+}
+
+function renderAgentProfileSelect() {
+    const currentValue = agentProfileSelect.value;
+    agentProfileSelect.innerHTML = appState.profiles.map((profile) => {
+        const runtime = getRunning(profile.id);
+        const suffix = runtime ? ' · 运行中' : ' · 可自动启动';
+        return `<option value="${profile.id}">${escapeHtml(profile.name)}${suffix}</option>`;
+    }).join('');
+
+    if (!appState.profiles.length) {
+        agentProfileSelect.innerHTML = '<option value="">暂无环境</option>';
+        return;
+    }
+
+    agentProfileSelect.value = appState.profiles.some((item) => item.id === currentValue)
+        ? currentValue
+        : appState.profiles[0].id;
+}
+
+function getAgentRuntime() {
+    return appState.runtime.agent || {
+        running: false,
+        sessionId: '',
+        profileId: '',
+        profileName: '',
+        providerId: '',
+        providerName: '',
+        providerFormat: '',
+        model: '',
+        pageUrl: '',
+        events: []
+    };
+}
+
+function getAgentModelChoices() {
+    return getAgentProviders()
+        .filter((provider) => String(provider.model || '').trim())
+        .map((provider) => ({
+            value: provider.id,
+            model: provider.model,
+            providerName: provider.name || provider.model,
+            format: provider.format || '',
+            label: provider.name && provider.name !== provider.model
+                ? `${provider.model} · ${provider.name}`
+                : provider.model
+        }));
+}
+
+function openAgentLaunchDialog() {
+    renderAgentLaunchOptions();
+    agentLaunchDialog.classList.remove('hidden');
+}
+
+function closeAgentLaunchDialog() {
+    agentLaunchDialog.classList.add('hidden');
+}
+
+function renderAgentLaunchOptions() {
+    const runtimeAgent = getAgentRuntime();
+    const modelChoices = getAgentModelChoices();
+    const currentModelValue = modelChoices.some((item) => item.value === agentLaunchModelSelect.value)
+        ? agentLaunchModelSelect.value
+        : (runtimeAgent.providerId || getActiveProvider()?.id || modelChoices[0]?.value || '');
+
+    if (!modelChoices.length) {
+        agentLaunchModelSelect.innerHTML = '<option value="">暂无可用模型</option>';
+        agentLaunchModelSelect.value = '';
+    } else {
+        agentLaunchModelSelect.innerHTML = modelChoices.map((choice) => `
+            <option value="${choice.value}">${escapeHtml(choice.label)}</option>
+        `).join('');
+        agentLaunchModelSelect.value = currentModelValue;
+    }
+
+    const currentProfileValue = appState.profiles.some((item) => item.id === agentLaunchProfileSelect.value)
+        ? agentLaunchProfileSelect.value
+        : (runtimeAgent.profileId || appState.profiles[0]?.id || '');
+
+    if (!appState.profiles.length) {
+        agentLaunchProfileSelect.innerHTML = '<option value="">暂无窗口</option>';
+        agentLaunchProfileSelect.value = '';
+    } else {
+        agentLaunchProfileSelect.innerHTML = appState.profiles.map((profile) => {
+            const runtime = getRunning(profile.id);
+            const suffix = runtime ? ' · 已运行' : ' · 可自动启动';
+            return `<option value="${profile.id}">${escapeHtml(profile.name)}${suffix}</option>`;
+        }).join('');
+        agentLaunchProfileSelect.value = currentProfileValue;
+    }
+
+    openAgentLaunchDialogBtn.disabled = !modelChoices.length || !appState.profiles.length;
 }
 
 function renderProfilePreview() {
@@ -290,14 +464,14 @@ function renderProfileTable() {
         const proxy = proxies.find((item) => item.id === profile.proxyId);
         return `
             <tr>
-                <td>${getProfileCode(profile)}</td>
+                <td>${escapeHtml(getProfileCode(profile))}</td>
                 <td>
-                    <div class="profile-title">${profile.name}</div>
-                    <div class="profile-meta">${isBuiltInStartUrl(profile.startUrl) ? '内置检测页' : (profile.startUrl || '-')}</div>
+                    <div class="profile-title">${escapeHtml(profile.name)}</div>
+                    <div class="profile-meta">${escapeHtml(isBuiltInStartUrl(profile.startUrl) ? '内置检测页' : (profile.startUrl || '-'))}</div>
                 </td>
-                <td>${proxy ? proxy.name : '直连'}</td>
-                <td>${(profile.tags || []).join(', ') || '-'}</td>
-                <td>${formatDate(profile.lastOpenedAt || profile.createdAt)}</td>
+                <td>${escapeHtml(proxy ? proxy.name : '直连')}</td>
+                <td>${escapeHtml((profile.tags || []).join(', ') || '-')}</td>
+                <td>${escapeHtml(formatDate(profile.lastOpenedAt || profile.createdAt))}</td>
                 <td>${getProfileStatus(profile.id)}</td>
                 <td>${renderProfileActions(profile.id)}</td>
             </tr>
@@ -314,11 +488,11 @@ function renderProxyTable() {
 
     proxyTableBody.innerHTML = proxies.map((proxy) => `
         <tr>
-            <td>${proxy.name}</td>
-            <td>${getProxyProtocol(proxy)}</td>
-            <td>${proxy.source === 'subscription' ? '订阅' : proxy.source === 'file' ? '文件' : '手动'}</td>
+            <td>${escapeHtml(proxy.name)}</td>
+            <td>${escapeHtml(getProxyProtocol(proxy))}</td>
+            <td>${escapeHtml(proxy.source === 'subscription' ? '订阅' : proxy.source === 'file' ? '文件' : '手动')}</td>
             <td>${proxy.latency > 0 ? `${proxy.latency}ms` : '-'}</td>
-            <td>${formatDate(proxy.updatedAt)}</td>
+            <td>${escapeHtml(formatDate(proxy.updatedAt))}</td>
             <td>
                 <div class="proxy-actions">
                     <button class="small-btn" data-action="test-proxy" data-id="${proxy.id}">测速</button>
@@ -338,13 +512,11 @@ function renderSubscriptions() {
 
     subscriptionList.innerHTML = subscriptions.map((subscription) => `
         <div class="sub-item">
-            <div class="profile-top">
-                <div>
-                    <div class="profile-title">${subscription.name}</div>
-                    <div class="profile-meta">${subscription.url}</div>
-                </div>
+            <div>
+                <div class="profile-title">${escapeHtml(subscription.name)}</div>
+                <div class="profile-meta">${escapeHtml(subscription.url)}</div>
+                <div class="profile-meta">最近更新：${escapeHtml(formatDate(subscription.lastUpdated))}</div>
             </div>
-            <div class="profile-meta">最近更新：${formatDate(subscription.lastUpdated)}</div>
             <div class="sub-actions">
                 <button class="small-btn" data-action="refresh-subscription" data-id="${subscription.id}">刷新</button>
                 <button class="small-btn danger" data-action="delete-subscription" data-id="${subscription.id}">删除</button>
@@ -353,29 +525,270 @@ function renderSubscriptions() {
     `).join('');
 }
 
-function renderApiPanel() {
-    document.getElementById('apiEnabled').value = String(appState.settings.api.enabled);
-    document.getElementById('apiPort').value = String(appState.settings.api.port);
+function renderAgentModelOptions(provider = null) {
+    const select = document.getElementById('agentProviderModel');
+    const manualInput = document.getElementById('agentProviderManualModel');
+    const models = Array.from(new Set((provider?.models || []).filter(Boolean)));
+    agentDraftModels = clone(models);
+    const currentModel = manualInput.value.trim() || provider?.model || '';
 
-    document.getElementById('apiStatusCard').innerHTML = `
-        <div>服务状态：${appState.settings.api.enabled ? '已启用' : '已关闭'}</div>
-        <div>服务地址：${appState.runtime.apiUrl || '-'}</div>
-        <div>MCP 地址：${appState.runtime.apiUrl ? `${appState.runtime.apiUrl}/mcp` : '-'}</div>
-        <div>Mihomo：${appState.runtime.mihomoReady ? appState.runtime.mihomoBinary : '缺失，启动时会自动下载'}</div>
+    const options = ['<option value="">请选择或手动输入</option>']
+        .concat(models.map((modelId) => `<option value="${escapeHtml(modelId)}">${escapeHtml(modelId)}</option>`));
+    select.innerHTML = options.join('');
+
+    if (models.includes(currentModel)) {
+        select.value = currentModel;
+    } else {
+        select.value = '';
+        manualInput.value = currentModel;
+    }
+}
+
+function fillAgentProviderForm(provider = null) {
+    const format = provider?.format || getProviderFormats()[0]?.value || 'openai';
+    const formatMeta = getProviderFormatMeta(format);
+
+    document.getElementById('agentProviderId').value = provider?.id || '';
+    document.getElementById('agentProviderName').value = provider?.name || '';
+    document.getElementById('agentProviderFormat').value = format;
+    document.getElementById('agentProviderBaseUrl').value = provider?.baseUrl || formatMeta.defaultBaseUrl || '';
+    document.getElementById('agentProviderApiKey').value = provider?.apiKey || '';
+    document.getElementById('agentProviderManualModel').value = provider?.model || '';
+    agentToolTimeoutInput.value = String(getAgentToolTimeoutMs());
+    renderAgentModelOptions(provider);
+}
+
+function readAgentProviderPayload() {
+    const format = document.getElementById('agentProviderFormat').value;
+    const selectModel = document.getElementById('agentProviderModel').value.trim();
+    const manualModel = document.getElementById('agentProviderManualModel').value.trim();
+    const editingProvider = getAgentProviders().find((item) => item.id === document.getElementById('agentProviderId').value);
+
+    return {
+        id: document.getElementById('agentProviderId').value || undefined,
+        name: document.getElementById('agentProviderName').value.trim() || getProviderFormatMeta(format).label,
+        format,
+        baseUrl: document.getElementById('agentProviderBaseUrl').value.trim(),
+        apiKey: document.getElementById('agentProviderApiKey').value.trim(),
+        model: manualModel || selectModel,
+        models: clone(editingProvider?.models?.length ? editingProvider.models : agentDraftModels)
+    };
+}
+
+function readAgentSettingsPayload() {
+    return {
+        toolTimeoutMs: Math.max(5000, Math.min(60000, Number(agentToolTimeoutInput.value) || 20000))
+    };
+}
+
+function renderAgentProviderList() {
+    const providers = getAgentProviders();
+    const activeProvider = getActiveProvider();
+
+    if (!providers.length) {
+        agentProviderList.innerHTML = '<div class="sub-item">尚未保存任何供应商配置。</div>';
+        return;
+    }
+
+    agentProviderList.innerHTML = providers.map((provider) => {
+        const isActive = provider.id === activeProvider?.id;
+        return `
+            <div class="agent-provider-item ${isActive ? 'is-active' : ''}">
+                <div class="agent-provider-head">
+                    <div>
+                        <div class="agent-provider-title">${escapeHtml(provider.name)}</div>
+                        <div class="agent-provider-meta">${escapeHtml(provider.baseUrl || '-')}</div>
+                    </div>
+                    <span class="provider-chip">${escapeHtml(provider.format)}</span>
+                </div>
+                <div class="provider-badge-row">
+                    <span class="capability-chip">${escapeHtml(provider.model || '未选模型')}</span>
+                    <span class="capability-chip">${provider.models?.length || 0} 个模型缓存</span>
+                    ${isActive ? '<span class="capability-chip">默认配置</span>' : ''}
+                </div>
+                <div class="sub-actions">
+                    <button class="small-btn" data-action="edit-agent-provider" data-id="${provider.id}">编辑</button>
+                    <button class="small-btn" data-action="activate-agent-provider" data-id="${provider.id}">设为默认</button>
+                    <button class="small-btn danger" data-action="delete-agent-provider" data-id="${provider.id}">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderAgentRuntime() {
+    const activeProvider = getActiveProvider();
+    const runtimeAgent = appState.runtime.agent || { running: false };
+    const selectedRuntime = getRunning(agentProfileSelect.value);
+
+    agentActiveProviderBadge.textContent = activeProvider
+        ? `${activeProvider.name} · ${activeProvider.format}`
+        : '未配置供应商';
+    agentCurrentProviderInput.value = activeProvider
+        ? `${activeProvider.name} / ${activeProvider.model || '未选模型'}`
+        : '';
+
+    agentRuntimeCard.innerHTML = `
+        <div class="agent-runtime-row"><span>默认供应商</span><strong>${escapeHtml(activeProvider?.name || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>当前模型</span><strong>${escapeHtml(activeProvider?.model || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>目标环境状态</span><strong>${escapeHtml(selectedRuntime ? '已运行' : '可自动启动')}</strong></div>
+        <div class="agent-runtime-row"><span>调试端口</span><strong>${escapeHtml(selectedRuntime?.debugPort || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>Agent 状态</span><strong>${escapeHtml(runtimeAgent.running ? '执行中' : '空闲')}</strong></div>
     `;
 
-    document.getElementById('apiDocs').textContent = [
-        'GET  /api/status',
-        'GET  /api/profiles',
-        'POST /api/profiles',
-        'POST /api/profiles/:id/open',
-        'POST /api/profiles/:id/stop',
-        'POST /api/profiles/:id/clear-cache',
-        'GET  /api/proxies',
-        'GET  /mcp',
-        '',
-        '当前 MCP 入口是 HTTP 信息端点，后续可以继续扩展。'
-    ].join('\n');
+    providerModelsHint.textContent = activeProvider
+        ? `已缓存 ${activeProvider.models?.length || 0} 个模型，可继续手动补录`
+        : '模型列表尚未拉取';
+
+    const runDisabled = !activeProvider || !activeProvider.model || !appState.profiles.length || runtimeAgent.running;
+    document.getElementById('runAgentBtn').disabled = runDisabled;
+    document.getElementById('stopAgentBtn').disabled = !runtimeAgent.running;
+}
+
+function renderAgentLogs() {
+    if (!agentLogs.length) {
+        agentLogList.innerHTML = '<div class="sub-item">暂无日志。执行一次任务后会在这里显示模型决策和浏览器动作。</div>';
+        return;
+    }
+
+    agentLogList.innerHTML = agentLogs.slice().reverse().map((entry) => {
+        const levelClass = entry.level === 'error'
+            ? 'is-error'
+            : entry.level === 'final'
+                ? 'is-final'
+                : '';
+        return `
+            <div class="agent-log-item ${levelClass}">
+                <div class="agent-log-meta">
+                    <span>${escapeHtml(entry.level || 'info')}</span>
+                    <span>${escapeHtml(formatDate(entry.createdAt))}</span>
+                </div>
+                <div class="agent-log-text">${escapeHtml(entry.message || '')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderAgentRuntime() {
+    const activeProvider = getActiveProvider();
+    const runtimeAgent = getAgentRuntime();
+    const sessionProvider = getAgentProviders().find((item) => item.id === runtimeAgent.providerId) || activeProvider;
+    const modelChoices = getAgentModelChoices();
+    const hasSession = !!runtimeAgent.sessionId;
+    const sessionProfileRuntime = runtimeAgent.profileId ? getRunning(runtimeAgent.profileId) : null;
+
+    if (hasSession) {
+        agentActiveProviderBadge.textContent = `会话中 · ${runtimeAgent.profileName || '未命名窗口'} · ${runtimeAgent.model || '-'}`;
+    } else if (modelChoices.length) {
+        agentActiveProviderBadge.textContent = `已配置 ${modelChoices.length} 个可用模型`;
+    } else {
+        agentActiveProviderBadge.textContent = '未配置可用模型';
+    }
+
+    agentCurrentProviderEl.innerHTML = hasSession
+        ? `
+            <div class="agent-provider-title">${escapeHtml(runtimeAgent.model || '-')}</div>
+            <div class="agent-provider-meta">${escapeHtml(runtimeAgent.providerName || '-')} · ${escapeHtml(runtimeAgent.providerFormat || sessionProvider?.format || '-')}</div>
+        `
+        : (activeProvider
+            ? `
+                <div class="agent-provider-title">${escapeHtml(activeProvider.model || '未选择模型')}</div>
+                <div class="agent-provider-meta">${escapeHtml(activeProvider.name || '-')} · ${escapeHtml(activeProvider.format || '-')}</div>
+            `
+            : '<div class="agent-provider-meta">先在左侧保存提供商与模型，然后再启动窗口会话。</div>');
+
+    agentRuntimeCard.innerHTML = `
+        <div class="agent-runtime-row"><span>会话状态</span><strong>${escapeHtml(runtimeAgent.running ? '执行中' : (hasSession ? '待命中' : '未启动'))}</strong></div>
+        <div class="agent-runtime-row"><span>当前窗口</span><strong>${escapeHtml(runtimeAgent.profileName || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>模型</span><strong>${escapeHtml(runtimeAgent.model || activeProvider?.model || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>浏览器状态</span><strong>${escapeHtml(sessionProfileRuntime ? '已连接真实窗口' : (runtimeAgent.profileId ? '将自动拉起窗口' : '-'))}</strong></div>
+        <div class="agent-runtime-row"><span>当前页面</span><strong>${escapeHtml(runtimeAgent.pageUrl || '-')}</strong></div>
+    `;
+
+    providerModelsHint.textContent = activeProvider
+        ? `当前编辑配置已缓存 ${activeProvider.models?.length || 0} 个模型，可继续手动补充模型 ID。`
+        : '模型列表尚未拉取';
+
+    stopAgentBtn.disabled = !runtimeAgent.running;
+    closeAgentSessionBtn.disabled = !hasSession;
+    sendAgentMessageBtn.disabled = !hasSession || runtimeAgent.running;
+    agentComposerInput.disabled = !hasSession || runtimeAgent.running;
+    agentComposerInput.placeholder = hasSession
+        ? (runtimeAgent.running ? 'Agent 正在执行，请等待或先停止当前操作。' : '继续告诉 Agent 你想让这个窗口做什么')
+        : '先启动一个窗口 Agent 会话';
+}
+
+function renderAgentConversation() {
+    const runtimeAgent = getAgentRuntime();
+    const events = Array.isArray(runtimeAgent.events) ? runtimeAgent.events : [];
+
+    if (!events.length) {
+        agentConversationList.innerHTML = runtimeAgent.sessionId
+            ? '<div class="sub-item">会话已建立。发送第一条消息，让 Agent 接管这个窗口。</div>'
+            : '<div class="sub-item">这里会持续显示窗口会话中的对话、状态和浏览器操作记录。</div>';
+        return;
+    }
+
+    agentConversationList.innerHTML = events.map((entry) => {
+        let itemClass = 'is-status';
+        let title = '状态';
+        let body = entry.message || '';
+
+        if (entry.kind === 'message' && entry.role === 'user') {
+            itemClass = 'is-user';
+            title = '你';
+            body = entry.content || '';
+        } else if (entry.kind === 'message' && entry.role === 'assistant') {
+            itemClass = 'is-assistant';
+            title = 'Agent';
+            body = entry.content || '';
+        } else if (entry.kind === 'tool') {
+            title = '工具';
+        } else if (entry.level === 'error') {
+            itemClass = 'is-error';
+        }
+
+        return `
+            <div class="agent-chat-item ${itemClass}">
+                <div class="agent-log-meta">
+                    <span>${escapeHtml(title)}</span>
+                    <span>${escapeHtml(formatDate(entry.createdAt))}</span>
+                </div>
+                <div class="agent-log-text">${escapeHtml(body)}</div>
+            </div>
+        `;
+    }).join('');
+
+    agentConversationList.scrollTop = agentConversationList.scrollHeight;
+}
+
+function renderAgentDocs() {
+    const formats = getProviderFormats();
+    agentFormatDocs.innerHTML = formats.map((item) => `
+        <div class="sub-item">
+            <div>
+                <div class="profile-title">${escapeHtml(item.label)}</div>
+                <div class="profile-meta">${escapeHtml(item.value)} · 默认地址：${escapeHtml(item.defaultBaseUrl)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderAgentPanel() {
+    openAgentLaunchDialogBtn.textContent = '打开 Agent 窗口';
+    renderAgentLaunchOptions();
+    renderAgentProviderList();
+    renderAgentRuntime();
+    renderAgentConversation();
+    renderAgentDocs();
+
+    const currentId = document.getElementById('agentProviderId').value;
+    const editing = getAgentProviders().find((item) => item.id === currentId);
+    if (!currentId || !editing) {
+        fillAgentProviderForm(getActiveProvider());
+    } else {
+        fillAgentProviderForm(editing);
+    }
 }
 
 function renderAll() {
@@ -384,7 +797,7 @@ function renderAll() {
     renderProfileTable();
     renderProxyTable();
     renderSubscriptions();
-    renderApiPanel();
+    renderAgentPanel();
 }
 
 function collectProfilePayload() {
@@ -400,7 +813,7 @@ function collectProfilePayload() {
     };
 }
 
-async function handleProfileActions(event) {
+async function handleBodyActions(event) {
     const button = event.target.closest('[data-action]');
     if (!button) return;
 
@@ -475,11 +888,37 @@ async function handleProfileActions(event) {
         if (!window.confirm('确定删除这个订阅以及其下所有节点吗？')) return;
         await window.xbrowser.deleteSubscription(id);
         showToast('订阅已删除。');
+        return;
+    }
+
+    if (action === 'edit-agent-provider') {
+        const provider = getAgentProviders().find((item) => item.id === id);
+        fillAgentProviderForm(provider);
+        return;
+    }
+
+    if (action === 'activate-agent-provider') {
+        await window.xbrowser.setActiveAgentProvider(id);
+        showToast('默认供应商已切换。');
+        return;
+    }
+
+    if (action === 'delete-agent-provider') {
+        if (!window.confirm('确定删除这个供应商配置吗？')) return;
+        await window.xbrowser.deleteAgentProvider(id);
+
+        const editingId = document.getElementById('agentProviderId').value;
+        if (editingId === id) {
+            fillAgentProviderForm(getActiveProvider());
+        }
+
+        showToast('供应商配置已删除。');
     }
 }
 
 async function boot() {
     appState = await window.xbrowser.bootstrap();
+    mountAgentSettingsFields();
     renderAll();
 
     const initialView = viewIds.includes(appState.settings.ui.activeView)
@@ -488,6 +927,7 @@ async function boot() {
     setView(initialView);
 
     fillProfileForm();
+    fillAgentProviderForm(getActiveProvider());
     await randomizeFingerprintFields();
 }
 
@@ -539,13 +979,170 @@ document.getElementById('subscriptionForm').addEventListener('submit', async (ev
     showToast('订阅导入完成。');
 });
 
-document.getElementById('apiForm').addEventListener('submit', async (event) => {
+agentProviderForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    const enabled = document.getElementById('apiEnabled').value === 'true';
-    const port = Number(document.getElementById('apiPort').value);
-    await window.xbrowser.saveSettings({ api: { enabled, port } });
-    showToast('API 设置已保存。');
+    const payload = readAgentProviderPayload();
+    const agentSettings = readAgentSettingsPayload();
+    if (!payload.apiKey) {
+        showToast('API Key 不能为空。');
+        return;
+    }
+    if (!payload.baseUrl) {
+        showToast('Base URL 不能为空。');
+        return;
+    }
+
+    await window.xbrowser.saveSettings({ agent: agentSettings });
+    const provider = await window.xbrowser.saveAgentProvider(payload);
+    fillAgentProviderForm(provider);
+    showToast('供应商配置已保存。');
+});
+
+document.getElementById('newAgentProviderBtn').addEventListener('click', () => {
+    fillAgentProviderForm(null);
+});
+
+document.getElementById('fetchModelsBtn').addEventListener('click', async () => {
+    const payload = readAgentProviderPayload();
+    if (!payload.apiKey || !payload.baseUrl) {
+        showToast('请先填写 Base URL 和 API Key。');
+        return;
+    }
+
+    const models = await window.xbrowser.fetchAgentModels(payload);
+    const mergedProvider = {
+        ...payload,
+        models,
+        model: payload.model
+    };
+    renderAgentModelOptions(mergedProvider);
+    providerModelsHint.textContent = `已获取 ${models.length} 个模型`;
+    showToast(`已获取 ${models.length} 个模型。`);
+});
+
+document.getElementById('setDefaultProviderBtn').addEventListener('click', async () => {
+    let providerId = document.getElementById('agentProviderId').value;
+    if (!providerId) {
+        const payload = readAgentProviderPayload();
+        const saved = await window.xbrowser.saveAgentProvider({ ...payload, setActive: true });
+        providerId = saved.id;
+        fillAgentProviderForm(saved);
+    }
+    await window.xbrowser.setActiveAgentProvider(providerId);
+    showToast('默认供应商已设置。');
+});
+
+document.getElementById('deleteProviderBtn').addEventListener('click', async () => {
+    const providerId = document.getElementById('agentProviderId').value;
+    if (!providerId) {
+        fillAgentProviderForm(null);
+        return;
+    }
+    if (!window.confirm('确定删除这个供应商配置吗？')) return;
+    await window.xbrowser.deleteAgentProvider(providerId);
+    fillAgentProviderForm(getActiveProvider());
+    showToast('供应商配置已删除。');
+});
+
+document.getElementById('agentProviderFormat').addEventListener('change', (event) => {
+    const formatMeta = getProviderFormatMeta(event.target.value);
+    document.getElementById('agentProviderBaseUrl').value = formatMeta.defaultBaseUrl || '';
+    document.getElementById('agentProviderManualModel').value = '';
+    renderAgentModelOptions({ format: event.target.value, models: [], model: '' });
+});
+
+document.getElementById('agentProviderModel').addEventListener('change', (event) => {
+    document.getElementById('agentProviderManualModel').value = event.target.value || '';
+});
+
+document.getElementById('agentTaskForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const profileId = agentProfileSelect.value;
+    const prompt = document.getElementById('agentTaskPrompt').value.trim();
+    if (!profileId) {
+        showToast('请先创建或选择环境。');
+        return;
+    }
+    if (!prompt) {
+        showToast('请输入任务描述。');
+        return;
+    }
+
+    await window.xbrowser.runAgentTask({ profileId, prompt });
+    showToast('Agent 任务已提交。');
+});
+
+document.getElementById('stopAgentBtn').addEventListener('click', async () => {
+    await window.xbrowser.stopAgentTask();
+});
+
+document.getElementById('clearAgentLogBtn').addEventListener('click', () => {
+    agentLogs = [];
+    renderAgentLogs();
+});
+
+openAgentLaunchDialogBtn.addEventListener('click', () => {
+    window.xbrowser.openAgentWindow();
+});
+
+closeAgentLaunchDialogBtn.addEventListener('click', () => {
+    closeAgentLaunchDialog();
+});
+
+agentLaunchDialog.addEventListener('click', (event) => {
+    if (event.target === agentLaunchDialog) {
+        closeAgentLaunchDialog();
+    }
+});
+
+agentLaunchForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const providerId = agentLaunchModelSelect.value;
+    const profileId = agentLaunchProfileSelect.value;
+    const initialMessage = agentLaunchMessageInput.value.trim();
+
+    if (!providerId) {
+        showToast('请先选择一个可用模型。');
+        return;
+    }
+
+    if (!profileId) {
+        showToast('请选择要接管的窗口。');
+        return;
+    }
+
+    await window.xbrowser.startAgentSession({
+        providerId,
+        profileId,
+        initialMessage
+    });
+
+    agentLaunchMessageInput.value = '';
+    closeAgentLaunchDialog();
+    showToast('Agent 会话已启动。');
+});
+
+agentComposerForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const message = agentComposerInput.value.trim();
+    if (!message) {
+        showToast('消息不能为空。');
+        return;
+    }
+
+    await window.xbrowser.sendAgentSessionMessage({ message });
+    agentComposerInput.value = '';
+});
+
+closeAgentSessionBtn.addEventListener('click', async () => {
+    if (!window.confirm('确定结束当前 Agent 会话吗？会话记录会被清空，但不会关闭真实浏览器窗口。')) return;
+    await window.xbrowser.closeAgentSession();
+    agentComposerInput.value = '';
+    showToast('Agent 会话已结束。');
 });
 
 document.getElementById('importProxyFileBtn').addEventListener('click', async () => {
@@ -604,7 +1201,7 @@ navButtons.forEach((button) => {
 });
 
 document.body.addEventListener('click', (event) => {
-    handleProfileActions(event).catch((error) => {
+    handleBodyActions(event).catch((error) => {
         const button = event.target.closest('[data-action="launch-profile"]');
         if (button?.dataset?.id) {
             upsertLaunchProgress(button.dataset.id, {
@@ -645,6 +1242,12 @@ window.xbrowser.onLaunchProgress((payload) => {
 
     if (payload.done) {
         scheduleLaunchProgressCleanup(payload.profileId, payload.error ? 1800 : 400);
+    }
+});
+
+window.xbrowser.onAgentEvent((payload) => {
+    if (payload?.kind === 'status' && payload.level === 'error') {
+        console.error('[agent-event]', payload.message || payload);
     }
 });
 

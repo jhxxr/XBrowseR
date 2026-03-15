@@ -32,7 +32,7 @@
                 </button>
                 <button class="nav-btn" data-view="api">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
-                    API 与 MCP
+                    AI Agent
                 </button>
             </nav>
 
@@ -204,9 +204,18 @@
 
                             <label>
                                 <span>环境备忘录 Notes</span>
-                                <textarea id="profileNotes" rows="2" placeholder="输入相关账号密码及其它备忘记录"></textarea>
+                                <textarea id="profileNotes" rows="2" placeholder="输入相关账号、用途和其它备忘记录"></textarea>
                             </label>
 
+                            <div class="grid two">
+                                <label>
+                                    <span>Agent 默认超时（毫秒）</span>
+                                    <input id="agentToolTimeoutMs" type="number" min="5000" max="60000" step="1000" placeholder="20000">
+                                </label>
+                                <div class="agent-setting-note">
+                                    用于点击、输入、提取以及默认等待文本的超时时间。慢页面可以适当调大。
+                                </div>
+                            </div>
                             <div class="form-actions">
                                 <button type="submit" class="primary-btn">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -312,45 +321,151 @@
             </section>
 
             <section id="view-api" class="view">
-                <div class="api-grid">
+                <div class="agent-hero">
+                    <div class="agent-hero-copy">
+                        <div class="panel-kicker">内置智能控制</div>
+                        <h2>AI Agent + Playwright Browser Control</h2>
+                        <p class="agent-hero-text">供应商配置仅保存在本地。保存多个模型入口后，Agent 会读取当前默认配置，直接接管已启动浏览器。</p>
+                    </div>
+                    <div class="agent-hero-status">
+                        <div class="agent-status-badge">Playwright Embedded</div>
+                        <div id="agentActiveProviderBadge" class="agent-status-note">未配置供应商</div>
+                    </div>
+                </div>
+
+                <div class="api-grid agent-grid">
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">开发者接入</div>
-                                <h2>API / MCP 服务配置</h2>
+                                <div class="panel-kicker">Provider Registry</div>
+                                <h2>供应商与模型配置</h2>
                             </div>
+                            <button id="newAgentProviderBtn" type="button" class="ghost-btn">新增供应商</button>
                         </div>
 
-                        <form id="apiForm" class="stack-form">
+                        <form id="agentProviderForm" class="stack-form">
+                            <input type="hidden" id="agentProviderId">
                             <div class="grid two">
                                 <label>
-                                    <span>服务开关 Status</span>
-                                    <select id="apiEnabled">
-                                        <option value="true">State: 开启监听</option>
-                                        <option value="false">State: 安全关闭</option>
-                                    </select>
+                                    <span>配置名称</span>
+                                    <input id="agentProviderName" type="text" placeholder="例如：OpenAI Production">
                                 </label>
                                 <label>
-                                    <span>暴露端口 Port</span>
-                                    <input id="apiPort" type="number" min="1024" max="65535" value="5005">
+                                    <span>API 格式</span>
+                                    <select id="agentProviderFormat">
+                                        <option value="openai">openai</option>
+                                        <option value="openai-responses">openairesponse</option>
+                                        <option value="anthropic">anthropic</option>
+                                        <option value="gemini">gemini</option>
+                                    </select>
                                 </label>
                             </div>
+                            <div class="grid two">
+                                <label>
+                                    <span>Base URL</span>
+                                    <input id="agentProviderBaseUrl" type="text" placeholder="自动带入默认地址">
+                                </label>
+                                <label>
+                                    <span>API Key</span>
+                                    <input id="agentProviderApiKey" type="password" placeholder="仅保存在本地 settings.json">
+                                </label>
+                            </div>
+                            <div class="grid model-grid">
+                                <label>
+                                    <span>模型选择</span>
+                                    <select id="agentProviderModel"></select>
+                                </label>
+                                <label>
+                                    <span>手动模型 ID</span>
+                                    <input id="agentProviderManualModel" type="text" placeholder="可直接输入未在列表中的模型">
+                                </label>
+                                <div class="agent-inline-actions">
+                                    <button id="fetchModelsBtn" type="button" class="ghost-btn">自动获取模型</button>
+                                    <button id="setDefaultProviderBtn" type="button" class="ghost-btn">设为默认</button>
+                                    <button id="deleteProviderBtn" type="button" class="small-btn danger">删除</button>
+                                </div>
+                            </div>
+                            <div class="provider-meta-row">
+                                <div id="providerModelsHint" class="topbar-hint">模型列表尚未拉取</div>
+                                <div id="providerStorageHint" class="agent-inline-muted">保存位置：本地数据目录 / settings.json</div>
+                            </div>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">应用配置并热重启</button>
+                                <button type="submit" class="primary-btn">保存供应商配置</button>
                             </div>
                         </form>
 
-                        <div id="apiStatusCard" class="status-card" style="margin-top: 24px;"></div>
+                        <div class="sub-list-wrap">
+                            <div class="sub-list-title">已保存供应商</div>
+                            <div id="agentProviderList" class="sub-list"></div>
+                        </div>
                     </div>
 
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">说明文档</div>
-                                <h2>Endpoints 接口协议</h2>
+                                <div class="panel-kicker">Agent Window</div>
+                                <h2>窗口会话面板</h2>
+                            </div>
+                            <button id="openAgentLaunchDialogBtn" type="button" class="primary-btn">启动 Agent</button>
+                        </div>
+
+                        <div class="agent-window-note">
+                            持续对话和浏览器控制已移入独立 Agent 窗口，主界面只保留运行状态摘要，避免挤占配置区空间。
+                        </div>
+
+                        <div class="agent-runtime-grid">
+                            <div class="status-card">
+                                <div class="preview-title">会话状态</div>
+                                <div id="agentRuntimeCard" class="agent-runtime-card"></div>
+                            </div>
+                            <div class="status-card">
+                                <div class="preview-title">当前模型</div>
+                                <div id="agentCurrentProvider" class="agent-current-model"></div>
+                            </div>
+                            <div class="status-card">
+                                <div class="preview-title">内置工具</div>
+                                <div class="agent-capability-list">
+                                    <span class="capability-chip">Snapshot</span>
+                                    <span class="capability-chip">Navigate</span>
+                                    <span class="capability-chip">Click</span>
+                                    <span class="capability-chip">Fill</span>
+                                    <span class="capability-chip">Press</span>
+                                    <span class="capability-chip">Extract</span>
+                                </div>
                             </div>
                         </div>
-                        <pre id="apiDocs" class="api-docs"></pre>
+
+                        <div class="agent-log-panel" hidden>
+                            <div class="panel-head">
+                                <div>
+                                    <div class="panel-kicker">Session Chat</div>
+                                    <h2>持续对话</h2>
+                                </div>
+                                <div class="sub-actions">
+                                    <button id="stopAgentBtn" type="button" class="small-btn">停止当前操作</button>
+                                    <button id="closeAgentSessionBtn" type="button" class="small-btn danger">结束会话</button>
+                                </div>
+                            </div>
+                            <div id="agentConversationList" class="agent-conversation-list"></div>
+                            <form id="agentComposerForm" class="agent-composer">
+                                <textarea id="agentComposerInput" rows="3" placeholder="继续告诉 Agent 你想让这个窗口做什么"></textarea>
+                                <div class="agent-composer-actions">
+                                    <button type="submit" id="sendAgentMessageBtn" class="primary-btn">发送</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel agent-footer-panel">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-kicker">Provider Notes</div>
+                            <h2>协议格式说明</h2>
+                        </div>
+                    </div>
+                    <div id="agentFormatDocs" class="agent-format-docs">
+                        <div class="sub-item">OpenAI / OpenAI Responses / Anthropic / Gemini 都可单独保存并用于 Agent 执行，模型列表可自动抓取，也可手动补录模型 ID。</div>
                     </div>
                 </div>
             </section>
@@ -358,6 +473,46 @@
     </div>
 
     <div id="toast" class="toast"></div>
+    <div id="agentLaunchDialog" class="dialog-backdrop hidden">
+        <div class="dialog-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="panel-kicker">Start Session</div>
+                    <h2>启动窗口 Agent 会话</h2>
+                </div>
+                <button id="closeAgentLaunchDialogBtn" type="button" class="small-btn">关闭</button>
+            </div>
+            <form id="agentLaunchForm" class="stack-form">
+                <div class="grid two">
+                    <label>
+                        <span>选择模型</span>
+                        <select id="agentLaunchModel"></select>
+                    </label>
+                    <label>
+                        <span>选择窗口</span>
+                        <select id="agentLaunchProfile"></select>
+                    </label>
+                </div>
+                <label>
+                    <span>首句任务</span>
+                    <textarea id="agentLaunchMessage" rows="4" placeholder="例如：先查看当前页面结构，然后告诉我下一步能做什么"></textarea>
+                </label>
+                <div class="form-actions">
+                    <button type="submit" class="primary-btn">启动会话</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div hidden aria-hidden="true">
+        <form id="agentTaskForm">
+            <select id="agentProfileSelect"></select>
+            <textarea id="agentTaskPrompt"></textarea>
+            <button id="runAgentBtn" type="submit"></button>
+        </form>
+        <button id="clearAgentLogBtn" type="button"></button>
+        <input id="agentCurrentProviderInput" type="text">
+        <div id="agentLogList"></div>
+    </div>
     <script src="./renderer.js"></script>
 </body>
 </html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XBrowseR Agent</title>
+    <link rel="stylesheet" href="./agent-window.css">
+</head>
+<body>
+    <div class="shell">
+        <header class="hero">
+            <div>
+                <div class="eyebrow">Agent Console</div>
+                <h1>窗口控制台</h1>
+                <p>选择模型和窗口后，Agent 会持续绑定同一个真实浏览器窗口执行操作。</p>
+            </div>
+            <div id="agentStatusBadge" class="status-badge">未启动</div>
+        </header>
+
+        <section class="panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Launch</div>
+                    <h2>启动或切换会话</h2>
+                </div>
+            </div>
+            <form id="agentLaunchForm" class="stack">
+                <label>
+                    <span>模型</span>
+                    <select id="agentLaunchModel"></select>
+                </label>
+                <label>
+                    <span>窗口</span>
+                    <select id="agentLaunchProfile"></select>
+                </label>
+                <label>
+                    <span>首条消息</span>
+                    <textarea id="agentLaunchMessage" rows="4" placeholder="例如：先观察当前页面，再告诉我下一步可以做什么"></textarea>
+                </label>
+                <button id="startAgentSessionBtn" type="submit" class="primary-btn">启动会话</button>
+            </form>
+        </section>
+
+        <section class="panel summary-panel">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-label">当前模型</div>
+                    <div id="agentCurrentModel" class="summary-value">-</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">当前窗口</div>
+                    <div id="agentCurrentProfile" class="summary-value">-</div>
+                </div>
+                <div class="summary-card wide">
+                    <div class="summary-label">当前页面</div>
+                    <div id="agentCurrentPage" class="summary-value break">-</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel conversation-panel">
+            <div class="panel-head">
+                <div>
+                    <div class="eyebrow">Session Chat</div>
+                    <h2>持续对话</h2>
+                </div>
+                <div class="toolbar">
+                    <button id="stopAgentBtn" type="button" class="secondary-btn">停止当前操作</button>
+                    <button id="closeAgentSessionBtn" type="button" class="danger-btn">结束会话</button>
+                </div>
+            </div>
+            <div id="agentConversationList" class="conversation-list"></div>
+            <form id="agentComposerForm" class="composer">
+                <textarea id="agentComposerInput" rows="4" placeholder="继续告诉 Agent 你想让这个窗口做什么"></textarea>
+                <button id="sendAgentMessageBtn" type="submit" class="primary-btn">发送</button>
+            </form>
+        </section>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="./agent-window.js"></script>
+</body>
+</html>

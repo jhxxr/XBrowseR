@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('xbrowser', {
     bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
+    openAgentWindow: () => ipcRenderer.invoke('agent:window:open'),
     generateFingerprint: (payload) => ipcRenderer.invoke('fingerprint:generate', payload),
     saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload),
     deleteProfile: (id) => ipcRenderer.invoke('profile:delete', id),
@@ -15,8 +16,18 @@ contextBridge.exposeInMainWorld('xbrowser', {
     refreshSubscription: (id) => ipcRenderer.invoke('subscription:refresh', id),
     deleteSubscription: (id) => ipcRenderer.invoke('subscription:delete', id),
     importProxyFile: () => ipcRenderer.invoke('proxy:import-file'),
+    saveAgentProvider: (payload) => ipcRenderer.invoke('agent:provider:save', payload),
+    deleteAgentProvider: (id) => ipcRenderer.invoke('agent:provider:delete', id),
+    setActiveAgentProvider: (id) => ipcRenderer.invoke('agent:provider:set-active', id),
+    fetchAgentModels: (payload) => ipcRenderer.invoke('agent:provider:fetch-models', payload),
+    runAgentTask: (payload) => ipcRenderer.invoke('agent:run', payload),
+    stopAgentTask: () => ipcRenderer.invoke('agent:stop'),
+    startAgentSession: (payload) => ipcRenderer.invoke('agent:session:start', payload),
+    sendAgentSessionMessage: (payload) => ipcRenderer.invoke('agent:session:send', payload),
+    closeAgentSession: () => ipcRenderer.invoke('agent:session:close'),
     saveSettings: (payload) => ipcRenderer.invoke('settings:save', payload),
     openDataDir: () => ipcRenderer.invoke('app:open-data-dir'),
     onStateUpdated: (callback) => ipcRenderer.on('state-updated', (event, state) => callback(state)),
-    onLaunchProgress: (callback) => ipcRenderer.on('launch-progress', (event, payload) => callback(payload))
+    onLaunchProgress: (callback) => ipcRenderer.on('launch-progress', (event, payload) => callback(payload)),
+    onAgentEvent: (callback) => ipcRenderer.on('agent-event', (event, payload) => callback(payload))
 });
