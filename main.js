@@ -737,6 +737,9 @@ app.whenReady().then(async () => {
     await restartApiServer();
 
     ipcMain.handle('app:bootstrap', async () => buildState());
+    ipcMain.handle('fingerprint:generate', async (event, payload) => {
+        return createFingerprint(payload || {});
+    });
     ipcMain.handle('profile:save', async (event, payload) => {
         const next = buildProfile(payload || {});
         const index = profiles.findIndex(profile => profile.id === next.id);

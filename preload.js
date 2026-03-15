@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('xbrowser', {
     bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
+    generateFingerprint: (payload) => ipcRenderer.invoke('fingerprint:generate', payload),
     saveProfile: (payload) => ipcRenderer.invoke('profile:save', payload),
     deleteProfile: (id) => ipcRenderer.invoke('profile:delete', id),
     launchProfile: (id, requestId = '') => ipcRenderer.invoke('profile:launch', { id, requestId }),

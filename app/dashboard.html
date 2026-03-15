@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作台</title>
+    <title>Workspace</title>
     <style>
         :root {
             color-scheme: dark;
@@ -14,7 +14,6 @@
             --text: #edf4ff;
             --muted: rgba(220, 229, 241, 0.54);
             --accent: #2da7ff;
-            --accent-soft: rgba(45, 167, 255, 0.22);
         }
 
         * {
@@ -199,7 +198,7 @@
 
         .info-grid {
             display: grid;
-            grid-template-columns: 76px 1fr;
+            grid-template-columns: 92px 1fr;
             row-gap: 9px;
             column-gap: 10px;
             font-size: 12px;
@@ -245,6 +244,10 @@
                 width: 280px;
                 opacity: 0.44;
             }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -264,7 +267,7 @@
                 <div class="flag" id="flag">
                     <span class="flag-text" id="flagText">🌐</span>
                 </div>
-                <button class="refresh-btn" id="refreshBtn" type="button">测试代理 IP</button>
+                <button class="refresh-btn" id="refreshBtn" type="button">Check Proxy IP</button>
             </div>
 
             <div class="hero-main">
@@ -274,31 +277,33 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">窗口信息</h2>
+            <h2 class="section-title">Profile Info</h2>
             <div class="info-grid">
-                <div class="label">备注:</div>
+                <div class="label">Notes:</div>
                 <div class="value" id="notesValue">--</div>
-                <div class="label">项目:</div>
-                <div class="value" id="projectValue">默认项目</div>
-                <div class="label">标签:</div>
+                <div class="label">Project:</div>
+                <div class="value" id="projectValue">Default Project</div>
+                <div class="label">Tags:</div>
                 <div class="value" id="tagsValue">--</div>
             </div>
 
             <div class="section-gap"></div>
 
-            <h2 class="section-title">指纹信息</h2>
+            <h2 class="section-title">Runtime Fingerprint</h2>
             <div class="info-grid">
-                <div class="label">系统/内核:</div>
+                <div class="label">Kernel:</div>
                 <div class="value" id="kernelValue">--</div>
-                <div class="label">语言:</div>
+                <div class="label">Language:</div>
                 <div class="value" id="languageValue">--</div>
+                <div class="label">Timezone:</div>
+                <div class="value" id="timezoneValue">--</div>
                 <div class="label">User Agent:</div>
                 <div class="value" id="uaValue">--</div>
             </div>
         </section>
 
         <div class="footer">
-            <div>IP 查询数据来源: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
+            <div>Geo source: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
             <div>version 1.0</div>
         </div>
     </div>
@@ -335,7 +340,7 @@
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
-            }).format(now).replace(' ', ' ');
+            }).format(now);
             document.getElementById('clockLine').textContent = `${zone} (GMT${formatOffset(zone, now)}) ${timeText}`;
         }
 
@@ -428,7 +433,7 @@
                 }
             }
 
-            throw new Error('browser geo lookup failed');
+            throw new Error('Browser geo lookup failed');
         }
 
         function renderGeo(geo) {
@@ -448,13 +453,39 @@
             }
         }
 
+        function getRuntimeFingerprint() {
+            const ua = navigator.userAgent || '--';
+            const language = navigator.language || '--';
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || currentTimezone || 'UTC';
+            const platform = navigator.platform || '--';
+            const majorMatch = ua.match(/Chrome\/(\d+)/i);
+            const kernel = majorMatch ? `${platform} / Chrome ${majorMatch[1]}` : platform;
+
+            return {
+                userAgent: ua,
+                language,
+                timezone,
+                kernel
+            };
+        }
+
+        function renderRuntimeFingerprint() {
+            const runtimeFingerprint = getRuntimeFingerprint();
+            document.getElementById('kernelValue').textContent = runtimeFingerprint.kernel || '--';
+            document.getElementById('languageValue').textContent = runtimeFingerprint.language || '--';
+            document.getElementById('timezoneValue').textContent = runtimeFingerprint.timezone || '--';
+            document.getElementById('uaValue').textContent = runtimeFingerprint.userAgent || '--';
+            currentTimezone = runtimeFingerprint.timezone || currentTimezone;
+            updateClock(currentTimezone);
+        }
+
         async function loadDashboard(refresh = false) {
             if (!profileId) {
                 return;
             }
 
             refreshBtn.disabled = true;
-            refreshBtn.textContent = refresh ? '检测中...' : '测试代理 IP';
+            refreshBtn.textContent = refresh ? 'Checking...' : 'Check Proxy IP';
 
             try {
                 if (!currentProfileLoaded || !refresh) {
@@ -463,31 +494,28 @@
                     });
                     const data = await response.json();
                     if (!data.ok) {
-                        throw new Error(data.error || '加载失败');
+                        throw new Error(data.error || 'Failed to load dashboard');
                     }
 
-                    document.title = data.profile.name || '工作台';
+                    document.title = data.profile.name || 'Workspace';
                     document.getElementById('profileName').textContent = (data.profile.name || 'JHX').slice(0, 12);
                     document.getElementById('notesValue').textContent = data.profile.notes || '--';
-                    document.getElementById('projectValue').textContent = data.profile.project || '默认项目';
+                    document.getElementById('projectValue').textContent = data.profile.project || 'Default Project';
                     document.getElementById('tagsValue').textContent = data.profile.tags || '--';
-                    document.getElementById('kernelValue').textContent = data.fingerprint.kernel || '--';
-                    document.getElementById('languageValue').textContent = data.fingerprint.language || '--';
-                    document.getElementById('uaValue').textContent = data.fingerprint.userAgent || '--';
-                    currentTimezone = data.fingerprint.timezone || currentTimezone;
-                    updateClock(currentTimezone);
                     currentProfileLoaded = true;
                 }
+
+                renderRuntimeFingerprint();
 
                 const geo = await detectBrowserGeo();
                 renderGeo(geo);
             } catch (error) {
-                document.getElementById('locationText').textContent = '加载失败';
+                document.getElementById('locationText').textContent = 'Failed to load';
                 document.getElementById('ipText').textContent = 'IP: --';
                 updateFlag('');
             } finally {
                 refreshBtn.disabled = false;
-                refreshBtn.textContent = '测试代理 IP';
+                refreshBtn.textContent = 'Check Proxy IP';
             }
         }
 
