@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Workspace</title>
+    <title>工作台</title>
     <style>
         :root {
             color-scheme: dark;
@@ -267,7 +267,7 @@
                 <div class="flag" id="flag">
                     <span class="flag-text" id="flagText">🌐</span>
                 </div>
-                <button class="refresh-btn" id="refreshBtn" type="button">Check Proxy IP</button>
+                <button class="refresh-btn" id="refreshBtn" type="button">检测代理 IP</button>
             </div>
 
             <div class="hero-main">
@@ -277,33 +277,33 @@
         </section>
 
         <section class="card">
-            <h2 class="section-title">Profile Info</h2>
+            <h2 class="section-title">环境信息</h2>
             <div class="info-grid">
-                <div class="label">Notes:</div>
+                <div class="label">备注:</div>
                 <div class="value" id="notesValue">--</div>
-                <div class="label">Project:</div>
-                <div class="value" id="projectValue">Default Project</div>
-                <div class="label">Tags:</div>
+                <div class="label">项目:</div>
+                <div class="value" id="projectValue">默认项目</div>
+                <div class="label">标签:</div>
                 <div class="value" id="tagsValue">--</div>
             </div>
 
             <div class="section-gap"></div>
 
-            <h2 class="section-title">Runtime Fingerprint</h2>
+            <h2 class="section-title">运行时指纹</h2>
             <div class="info-grid">
-                <div class="label">Kernel:</div>
+                <div class="label">内核:</div>
                 <div class="value" id="kernelValue">--</div>
-                <div class="label">Language:</div>
+                <div class="label">语言:</div>
                 <div class="value" id="languageValue">--</div>
-                <div class="label">Timezone:</div>
+                <div class="label">时区:</div>
                 <div class="value" id="timezoneValue">--</div>
-                <div class="label">User Agent:</div>
+                <div class="label">User-Agent:</div>
                 <div class="value" id="uaValue">--</div>
             </div>
         </section>
 
         <div class="footer">
-            <div>Geo source: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
+            <div>地理信息来源: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
             <div>version 1.0</div>
         </div>
     </div>
@@ -433,7 +433,7 @@
                 }
             }
 
-            throw new Error('Browser geo lookup failed');
+            throw new Error('浏览器地理信息检测失败');
         }
 
         function renderGeo(geo) {
@@ -485,7 +485,7 @@
             }
 
             refreshBtn.disabled = true;
-            refreshBtn.textContent = refresh ? 'Checking...' : 'Check Proxy IP';
+            refreshBtn.textContent = refresh ? '检测中...' : '检测代理 IP';
 
             try {
                 if (!currentProfileLoaded || !refresh) {
@@ -494,13 +494,13 @@
                     });
                     const data = await response.json();
                     if (!data.ok) {
-                        throw new Error(data.error || 'Failed to load dashboard');
+                        throw new Error(data.error || '加载检测页失败');
                     }
 
-                    document.title = data.profile.name || 'Workspace';
+                    document.title = data.profile.name || '工作台';
                     document.getElementById('profileName').textContent = (data.profile.name || 'JHX').slice(0, 12);
                     document.getElementById('notesValue').textContent = data.profile.notes || '--';
-                    document.getElementById('projectValue').textContent = data.profile.project || 'Default Project';
+                    document.getElementById('projectValue').textContent = data.profile.project || '默认项目';
                     document.getElementById('tagsValue').textContent = data.profile.tags || '--';
                     currentProfileLoaded = true;
                 }
@@ -510,12 +510,12 @@
                 const geo = await detectBrowserGeo();
                 renderGeo(geo);
             } catch (error) {
-                document.getElementById('locationText').textContent = 'Failed to load';
+                document.getElementById('locationText').textContent = '加载失败';
                 document.getElementById('ipText').textContent = 'IP: --';
                 updateFlag('');
             } finally {
                 refreshBtn.disabled = false;
-                refreshBtn.textContent = 'Check Proxy IP';
+                refreshBtn.textContent = '检测代理 IP';
             }
         }
 

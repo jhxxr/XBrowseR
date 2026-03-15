@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,19 +13,19 @@
                 <div class="brand-mark">XB</div>
                 <div>
                     <div class="brand-title">XBrowseR</div>
-                    <div class="brand-subtitle">Mihomo Fingerprint Browser</div>
+                    <div class="brand-subtitle">Mihomo 指纹浏览器</div>
                 </div>
             </div>
 
-            <button class="nav-btn active" data-view="home">Profiles</button>
-            <button class="nav-btn" data-view="create">Create Profile</button>
-            <button class="nav-btn" data-view="proxies">Proxies</button>
-            <button class="nav-btn" data-view="api">API & AI MCP</button>
+            <button class="nav-btn active" data-view="home">全部环境</button>
+            <button class="nav-btn" data-view="create">创建环境</button>
+            <button class="nav-btn" data-view="proxies">代理管理</button>
+            <button class="nav-btn" data-view="api">API 与 MCP</button>
 
             <div class="sidebar-card">
-                <div class="sidebar-label">Runtime</div>
-                <div id="sidebarRuntime" class="sidebar-value">Loading...</div>
-                <button id="openDataDirBtn" class="ghost-btn">Open Data Folder</button>
+                <div class="sidebar-label">运行状态</div>
+                <div id="sidebarRuntime" class="sidebar-value">加载中...</div>
+                <button id="openDataDirBtn" class="ghost-btn">打开数据目录</button>
             </div>
         </aside>
 
@@ -33,23 +33,23 @@
             <header class="topbar">
                 <div>
                     <div class="eyebrow">CURRENT PROJECT</div>
-                    <h1>Fresh Workspace</h1>
+                    <h1>当前工作区</h1>
                 </div>
-                <div id="topbarHint" class="topbar-hint">Waiting for bootstrap...</div>
+                <div id="topbarHint" class="topbar-hint">正在初始化...</div>
             </header>
 
             <section id="view-home" class="view active">
                 <div class="summary-strip">
                     <div class="summary-card">
-                        <div class="stat-label">Profiles</div>
+                        <div class="stat-label">环境总数</div>
                         <div id="statProfiles" class="summary-value">0</div>
                     </div>
                     <div class="summary-card">
-                        <div class="stat-label">Available Proxies</div>
+                        <div class="stat-label">可用代理</div>
                         <div id="statProxies" class="summary-value">0</div>
                     </div>
                     <div class="summary-card">
-                        <div class="stat-label">Running</div>
+                        <div class="stat-label">运行中</div>
                         <div id="statRunning" class="summary-value">0</div>
                     </div>
                 </div>
@@ -57,23 +57,23 @@
                 <div class="panel">
                     <div class="panel-head">
                         <div>
-                            <div class="panel-kicker">Profile Manager</div>
-                            <h2>All Profiles</h2>
+                            <div class="panel-kicker">环境管理</div>
+                            <h2>全部环境</h2>
                         </div>
                         <div class="panel-actions">
-                            <button id="gotoCreateBtn" class="ghost-btn">Create</button>
-                            <button id="refreshHomeBtn" class="ghost-btn">Refresh</button>
+                            <button id="gotoCreateBtn" class="ghost-btn">创建环境</button>
+                            <button id="refreshHomeBtn" class="ghost-btn">刷新</button>
                         </div>
                     </div>
 
                     <div class="list-toolbar">
                         <div class="filter-tabs">
-                            <button class="tab-chip active" data-filter="all">All</button>
-                            <button class="tab-chip" data-filter="running">Running</button>
-                            <button class="tab-chip" data-filter="stopped">Stopped</button>
+                            <button class="tab-chip active" data-filter="all">全部</button>
+                            <button class="tab-chip" data-filter="running">运行中</button>
+                            <button class="tab-chip" data-filter="stopped">未启动</button>
                         </div>
                         <div class="search-wrap">
-                            <input id="homeSearchInput" type="text" placeholder="Search profile, tag, note, proxy">
+                            <input id="homeSearchInput" type="text" placeholder="搜索环境名、标签、备注、代理">
                         </div>
                     </div>
 
@@ -81,13 +81,13 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th>ID</th>
-                                    <th>Profile</th>
-                                    <th>Proxy</th>
-                                    <th>Tags</th>
-                                    <th>Last Opened</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
+                                    <th>编号</th>
+                                    <th>环境</th>
+                                    <th>代理</th>
+                                    <th>标签</th>
+                                    <th>最后打开</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="profileTableBody"></tbody>
@@ -101,15 +101,15 @@
                     <div class="hero-panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">Single Profile</div>
-                                <h2>Create Profile</h2>
+                                <div class="panel-kicker">单个环境</div>
+                                <h2>创建环境</h2>
                             </div>
-                            <div class="panel-tag">Fingerprint + Proxy + Isolated Storage</div>
+                            <div class="panel-tag">指纹 + 代理 + 独立存储</div>
                         </div>
 
                         <div class="preset-bar">
-                            <button type="button" class="small-btn preset-url-btn" data-url="">Built-in Start Page</button>
-                            <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IP Check</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="">内置检测页</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IP 检测</button>
                             <button type="button" class="small-btn preset-url-btn" data-url="https://bot.sannysoft.com/">SannySoft</button>
                             <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
                             <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
@@ -119,26 +119,26 @@
                             <input type="hidden" id="profileId">
 
                             <label>
-                                <span>Profile Name</span>
-                                <input id="profileName" type="text" placeholder="HK-Shop-01" required>
+                                <span>环境名称</span>
+                                <input id="profileName" type="text" placeholder="例如：HK-Shop-01" required>
                             </label>
 
                             <label>
-                                <span>Start URL</span>
-                                <input id="profileStartUrl" type="text" placeholder="Leave empty to use the built-in start page">
+                                <span>启动网址</span>
+                                <input id="profileStartUrl" type="text" placeholder="留空则使用内置检测页">
                             </label>
 
                             <div class="grid two">
                                 <label>
-                                    <span>Platform</span>
+                                    <span>平台</span>
                                     <select id="profilePlatform">
-                                        <option value="Win32">Win32</option>
-                                        <option value="MacIntel">MacIntel</option>
+                                        <option value="Win32">Windows</option>
+                                        <option value="MacIntel">macOS</option>
                                     </select>
                                 </label>
 
                                 <label>
-                                    <span>Proxy</span>
+                                    <span>代理</span>
                                     <select id="profileProxyId"></select>
                                 </label>
                             </div>
@@ -150,56 +150,56 @@
 
                             <div class="grid four">
                                 <label>
-                                    <span>Language</span>
-                                    <input id="profileLanguage" type="text" placeholder="Leave empty to follow proxy IP">
+                                    <span>语言</span>
+                                    <input id="profileLanguage" type="text" placeholder="留空则跟随代理 IP">
                                 </label>
                                 <label>
-                                    <span>Timezone</span>
-                                    <input id="profileTimezone" type="text" placeholder="Leave empty to follow proxy IP">
+                                    <span>时区</span>
+                                    <input id="profileTimezone" type="text" placeholder="留空则跟随代理 IP">
                                 </label>
                                 <label>
-                                    <span>CPU Threads</span>
+                                    <span>CPU 线程</span>
                                     <input id="profileHardware" type="number" min="2" max="32">
                                 </label>
                                 <label>
-                                    <span>Memory (GB)</span>
+                                    <span>内存(GB)</span>
                                     <input id="profileMemory" type="number" min="2" max="32">
                                 </label>
                             </div>
 
                             <div class="grid two">
                                 <label>
-                                    <span>Screen Width</span>
+                                    <span>屏幕宽度</span>
                                     <input id="profileWidth" type="number" min="800">
                                 </label>
                                 <label>
-                                    <span>Screen Height</span>
+                                    <span>屏幕高度</span>
                                     <input id="profileHeight" type="number" min="600">
                                 </label>
                             </div>
 
                             <label>
-                                <span>Tags</span>
+                                <span>标签</span>
                                 <input id="profileTags" type="text" placeholder="shop, hk, chrome145">
                             </label>
 
                             <label>
-                                <span>Notes</span>
-                                <textarea id="profileNotes" rows="3" placeholder="Account notes, task notes, or environment remarks"></textarea>
+                                <span>备注</span>
+                                <textarea id="profileNotes" rows="3" placeholder="账号备注、用途说明或操作记录"></textarea>
                             </label>
 
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">Save Profile</button>
-                                <button type="button" id="randomizeBtn" class="ghost-btn">Randomize Fingerprint</button>
-                                <button type="button" id="resetFormBtn" class="ghost-btn">Reset Form</button>
+                                <button type="submit" class="primary-btn">保存环境</button>
+                                <button type="button" id="randomizeBtn" class="ghost-btn">随机指纹</button>
+                                <button type="button" id="resetFormBtn" class="ghost-btn">重置表单</button>
                             </div>
                         </form>
                     </div>
 
                     <div class="hero-aside">
                         <div class="preview-card create-preview">
-                            <div class="preview-title">Fingerprint Preview</div>
-                            <pre id="fingerprintPreview">Waiting for input</pre>
+                            <div class="preview-title">指纹预览</div>
+                            <pre id="fingerprintPreview">等待输入</pre>
                         </div>
                     </div>
                 </div>
@@ -210,22 +210,22 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">Manual Node</div>
-                                <h2>Add Proxy</h2>
+                                <div class="panel-kicker">手动添加</div>
+                                <h2>新增代理</h2>
                             </div>
                         </div>
                         <form id="manualProxyForm" class="stack-form">
                             <label>
-                                <span>Proxy Name</span>
-                                <input id="manualProxyName" type="text" placeholder="HK-Residential-01">
+                                <span>代理名称</span>
+                                <input id="manualProxyName" type="text" placeholder="例如：HK-Residential-01">
                             </label>
                             <label>
-                                <span>Proxy URL</span>
+                                <span>代理链接</span>
                                 <textarea id="manualProxyUrl" rows="4" placeholder="vmess://, vless://, trojan://, ss://, hy2://, tuic://"></textarea>
                             </label>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">Add Proxy</button>
-                                <button type="button" id="importProxyFileBtn" class="ghost-btn">Import Proxy File</button>
+                                <button type="submit" class="primary-btn">添加代理</button>
+                                <button type="button" id="importProxyFileBtn" class="ghost-btn">导入代理文件</button>
                             </div>
                         </form>
                     </div>
@@ -233,26 +233,26 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">Subscription Import</div>
-                                <h2>Remote Nodes</h2>
+                                <div class="panel-kicker">订阅导入</div>
+                                <h2>远程节点</h2>
                             </div>
                         </div>
                         <form id="subscriptionForm" class="stack-form">
                             <label>
-                                <span>Subscription Name</span>
-                                <input id="subscriptionName" type="text" placeholder="Airport-HK">
+                                <span>订阅名称</span>
+                                <input id="subscriptionName" type="text" placeholder="例如：Airport-HK">
                             </label>
                             <label>
-                                <span>Subscription URL</span>
+                                <span>订阅地址</span>
                                 <input id="subscriptionUrl" type="text" placeholder="https://example.com/sub">
                             </label>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">Import Subscription</button>
+                                <button type="submit" class="primary-btn">导入订阅</button>
                             </div>
                         </form>
 
                         <div class="sub-list-wrap">
-                            <div class="sub-list-title">Saved Subscriptions</div>
+                            <div class="sub-list-title">已保存订阅</div>
                             <div id="subscriptionList" class="sub-list"></div>
                         </div>
                     </div>
@@ -261,20 +261,20 @@
                 <div class="panel">
                     <div class="panel-head">
                         <div>
-                            <div class="panel-kicker">Proxy List</div>
-                            <h2>Proxies</h2>
+                            <div class="panel-kicker">代理列表</div>
+                            <h2>全部代理</h2>
                         </div>
                     </div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Name</th>
-                                    <th>Protocol</th>
-                                    <th>Source</th>
-                                    <th>Latency</th>
-                                    <th>Updated At</th>
-                                    <th>Actions</th>
+                                    <th>名称</th>
+                                    <th>协议</th>
+                                    <th>来源</th>
+                                    <th>延迟</th>
+                                    <th>更新时间</th>
+                                    <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="proxyTableBody"></tbody>
@@ -288,7 +288,7 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">Local Service</div>
+                                <div class="panel-kicker">本地服务</div>
                                 <h2>API / MCP</h2>
                             </div>
                         </div>
@@ -296,19 +296,19 @@
                         <form id="apiForm" class="stack-form">
                             <div class="grid two">
                                 <label>
-                                    <span>Enable API</span>
+                                    <span>启用 API</span>
                                     <select id="apiEnabled">
-                                        <option value="true">Enabled</option>
-                                        <option value="false">Disabled</option>
+                                        <option value="true">启用</option>
+                                        <option value="false">关闭</option>
                                     </select>
                                 </label>
                                 <label>
-                                    <span>Port</span>
+                                    <span>端口</span>
                                     <input id="apiPort" type="number" min="1024" max="65535">
                                 </label>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="primary-btn">Save API Settings</button>
+                                <button type="submit" class="primary-btn">保存 API 设置</button>
                             </div>
                         </form>
 
@@ -318,8 +318,8 @@
                     <div class="panel">
                         <div class="panel-head">
                             <div>
-                                <div class="panel-kicker">Available Endpoints</div>
-                                <h2>Local Docs</h2>
+                                <div class="panel-kicker">可用接口</div>
+                                <h2>本地文档</h2>
                             </div>
                         </div>
                         <pre id="apiDocs" class="api-docs"></pre>

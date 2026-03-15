@@ -301,7 +301,7 @@ async function waitForBrowserWindowReady(debugPort, timeoutMs = 15000) {
         await new Promise(resolve => setTimeout(resolve, 180));
     }
 
-    throw new Error('Browser window did not become ready in time');
+    throw new Error('浏览器窗口未能在预期时间内完成启动');
 }
 
 async function buildDashboardPayload(profileId, { refresh = false } = {}) {
@@ -417,7 +417,7 @@ async function stopProfile(profileId) {
 
 async function openProfile(profileId, { requestId = '' } = {}) {
     const profile = getProfile(profileId);
-    if (!profile) throw new Error('Profile not found');
+    if (!profile) throw new Error('环境不存在');
 
     const existing = runningProfiles.get(profileId);
     if (existing?.browserPid) {
@@ -430,7 +430,7 @@ async function openProfile(profileId, { requestId = '' } = {}) {
     const browserBinary = resolveBrowserExecutable();
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 0, 'error', '未找到 Chrome 或 Chromium', { error: true, done: true });
-        throw new Error('Chrome/Chromium executable not found');
+        throw new Error('未找到 Chrome 或 Chromium 可执行文件');
     }
 
     if (!fs.existsSync(getBinaryPath(BASE_DIR))) {
@@ -554,9 +554,9 @@ async function openProfile(profileId, { requestId = '' } = {}) {
 }
 
 async function importSubscription(payload = {}) {
-    const name = payload.name || 'Subscription';
+    const name = payload.name || '订阅';
     const url = payload.url;
-    if (!url) throw new Error('Subscription URL required');
+    if (!url) throw new Error('订阅地址不能为空');
 
     const res = await fetch(url, { headers: { 'User-Agent': 'Mihomo/XBrowseR' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -647,7 +647,7 @@ function createApiServer(port) {
         }
 
         res.writeHead(404);
-        res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+        res.end(JSON.stringify({ ok: false, error: '未找到接口' }));
     });
 }
 
@@ -667,12 +667,12 @@ function createInternalServer() {
             const payload = await buildDashboardPayload(profileId, { refresh });
 
             res.writeHead(payload ? 200 : 404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify(payload || { ok: false, error: 'Profile not found' }));
+            res.end(JSON.stringify(payload || { ok: false, error: '环境不存在' }));
             return;
         }
 
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Not found');
+        res.end('未找到资源');
     });
 }
 
@@ -764,7 +764,7 @@ app.whenReady().then(async () => {
     });
     ipcMain.handle('profile:stop', async (event, id) => stopProfile(id));
     ipcMain.handle('proxy:add-manual', async (event, payload) => {
-        const proxy = parseProxyLink(payload.url, payload.name || 'Manual Node');
+        const proxy = parseProxyLink(payload.url, payload.name || '手动节点');
         const record = proxyRecordFromParsed(proxy, {
             name: payload.name || proxy.name,
             url: payload.url,
@@ -785,7 +785,7 @@ app.whenReady().then(async () => {
     });
     ipcMain.handle('proxy:test', async (event, id) => {
         const proxy = getProxy(id);
-        if (!proxy) throw new Error('Proxy not found');
+        if (!proxy) throw new Error('代理不存在');
         const mixedPort = await getPort();
         const controllerPort = await getPort();
         const result = await testProxyLatency({
@@ -804,7 +804,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('subscription:import', async (event, payload) => importSubscription(payload));
     ipcMain.handle('subscription:refresh', async (event, id) => {
         const subscription = getSubscription(id);
-        if (!subscription) throw new Error('Subscription not found');
+        if (!subscription) throw new Error('订阅不存在');
         return importSubscription(subscription);
     });
     ipcMain.handle('subscription:delete', async (event, id) => {
@@ -820,10 +820,10 @@ app.whenReady().then(async () => {
     });
     ipcMain.handle('proxy:import-file', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog({
-            title: 'Import nodes',
+            title: '导入节点',
             properties: ['openFile'],
             filters: [
-                { name: 'Supported files', extensions: ['txt', 'yaml', 'yml', 'json', 'conf'] }
+                { name: '支持的文件', extensions: ['txt', 'yaml', 'yml', 'json', 'conf'] }
             ]
         });
         if (canceled || !filePaths.length) return { canceled: true };
