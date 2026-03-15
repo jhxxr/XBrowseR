@@ -1551,6 +1551,20 @@ app.whenReady().then(async () => {
             message: payload?.message || ''
         });
     });
+    ipcMain.handle('agent:batch:start', async (event, payload) => {
+        const provider = payload?.providerId
+            ? getAgentProvider(payload.providerId)
+            : getAgentProviderByModel(payload?.model);
+        if (!provider) {
+            throw new Error('鏈壘鍒颁笌妯″瀷瀵瑰簲鐨勪緵搴斿晢閰嶇疆');
+        }
+
+        return agentController.startBatchRun({
+            profileIds: payload?.profileIds || [],
+            provider,
+            prompt: payload?.prompt || ''
+        });
+    });
     ipcMain.handle('agent:session:close', async () => {
         return agentController.closeSession();
     });

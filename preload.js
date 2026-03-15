@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('xbrowser', {
     stopAgentTask: () => ipcRenderer.invoke('agent:stop'),
     startAgentSession: (payload) => ipcRenderer.invoke('agent:session:start', payload),
     sendAgentSessionMessage: (payload) => ipcRenderer.invoke('agent:session:send', payload),
+    startAgentBatch: (payload) => ipcRenderer.invoke('agent:batch:start', payload),
     closeAgentSession: () => ipcRenderer.invoke('agent:session:close'),
     saveSettings: (payload) => ipcRenderer.invoke('settings:save', payload),
     openDataDir: () => ipcRenderer.invoke('app:open-data-dir'),
