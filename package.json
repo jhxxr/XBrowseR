@@ -1,0 +1,60 @@
+{
+  "name": "xbrowser",
+  "version": "0.1.0",
+  "description": "Mihomo-powered fingerprint browser manager",
+  "main": "main.js",
+  "author": "OpenAI Codex",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "ensure:mihomo": "node scripts/ensure-mihomo.js",
+    "postinstall": "node scripts/ensure-mihomo.js",
+    "dist": "npm run ensure:mihomo && electron-builder --win nsis",
+    "pack": "npm run ensure:mihomo && electron-builder --dir"
+  },
+  "dependencies": {
+    "extract-zip": "^2.0.1",
+    "fs-extra": "^11.3.2",
+    "get-port": "^5.1.1",
+    "js-yaml": "^4.1.1",
+    "socks-proxy-agent": "^8.0.5",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.xbrowser.app",
+    "productName": "XBrowseR",
+    "files": [
+      "app/**/*",
+      "lib/**/*",
+      "scripts/**/*",
+      "main.js",
+      "preload.js",
+      "profile-preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*",
+          "!**/*.zip",
+          "!**/*.gz",
+          "!**/*-extract/**"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}

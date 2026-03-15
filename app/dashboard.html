@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作台</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg-top: #03121d;
+            --bg-bottom: #020d16;
+            --panel: rgba(48, 55, 65, 0.97);
+            --panel-line: rgba(132, 146, 168, 0.16);
+            --text: #edf4ff;
+            --muted: rgba(220, 229, 241, 0.54);
+            --accent: #2da7ff;
+            --accent-soft: rgba(45, 167, 255, 0.22);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 16% 100%, rgba(0, 170, 255, 0.12), transparent 30%),
+                radial-gradient(circle at 86% 100%, rgba(91, 71, 255, 0.12), transparent 26%),
+                linear-gradient(180deg, #02131d, #03111a 52%, #020b13);
+        }
+
+        .shell {
+            width: min(100%, 760px);
+            margin: 0 auto;
+            padding: 22px 18px 22px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 12px;
+            color: var(--muted);
+            font-size: 11px;
+            letter-spacing: 0.01em;
+        }
+
+        .title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 9px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #2bb6ff, #3881ff);
+            color: #f6fbff;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            box-shadow: 0 8px 16px rgba(31, 125, 255, 0.22);
+        }
+
+        .index-label {
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            min-height: 170px;
+            padding: 18px 18px 16px;
+            border-radius: 14px;
+            background: var(--panel);
+            border: 1px solid var(--panel-line);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+        }
+
+        .hero-pattern {
+            position: absolute;
+            top: -12px;
+            right: -6px;
+            bottom: -18px;
+            width: 350px;
+            background:
+                repeating-radial-gradient(circle at 8% 50%, rgba(54, 121, 214, 0) 0 18px, rgba(54, 121, 214, 0.2) 18px 20px, rgba(54, 121, 214, 0) 20px 36px),
+                linear-gradient(180deg, rgba(26, 39, 56, 0), rgba(26, 39, 56, 0.18));
+            opacity: 0.72;
+            transform: rotate(-7deg);
+            pointer-events: none;
+        }
+
+        .hero-top {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .flag {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(180deg, #203047, #182435);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.16),
+                0 8px 14px rgba(0, 0, 0, 0.2);
+        }
+
+        .flag::before {
+            content: "";
+            position: absolute;
+            inset: 7px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent 68%);
+            opacity: 0.66;
+        }
+
+        .flag-text {
+            position: relative;
+            z-index: 1;
+            font-size: 22px;
+            line-height: 1;
+        }
+
+        .refresh-btn {
+            position: relative;
+            z-index: 1;
+            border: 1px solid rgba(75, 164, 255, 0.4);
+            background: rgba(8, 17, 29, 0.72);
+            color: #33a8ff;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+
+        .hero-main {
+            position: relative;
+            z-index: 1;
+            margin-top: 56px;
+        }
+
+        .location {
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 1.3;
+            letter-spacing: -0.01em;
+        }
+
+        .ip-line {
+            margin-top: 5px;
+            color: var(--accent);
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .card {
+            margin-top: 14px;
+            padding: 15px 14px 14px;
+            border-radius: 12px;
+            background: var(--panel);
+            border: 1px solid var(--panel-line);
+        }
+
+        .section-title {
+            margin: 0 0 9px;
+            color: #e9f2ff;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 76px 1fr;
+            row-gap: 9px;
+            column-gap: 10px;
+            font-size: 12px;
+        }
+
+        .label {
+            color: rgba(237, 244, 255, 0.84);
+            font-weight: 600;
+        }
+
+        .value {
+            color: var(--muted);
+            word-break: break-word;
+            line-height: 1.45;
+        }
+
+        .section-gap {
+            height: 22px;
+        }
+
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 9px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .footer a {
+            color: #34a8ff;
+            text-decoration: none;
+        }
+
+        @media (max-width: 760px) {
+            .shell {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            .hero-pattern {
+                width: 280px;
+                opacity: 0.44;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="topbar">
+            <div class="title-wrap">
+                <span class="chip" id="profileName">JHX</span>
+                <span class="index-label">1</span>
+            </div>
+            <div id="clockLine">--</div>
+        </div>
+
+        <section class="hero">
+            <div class="hero-pattern" aria-hidden="true"></div>
+            <div class="hero-top">
+                <div class="flag" id="flag">
+                    <span class="flag-text" id="flagText">🌐</span>
+                </div>
+                <button class="refresh-btn" id="refreshBtn" type="button">测试代理 IP</button>
+            </div>
+
+            <div class="hero-main">
+                <div class="location" id="locationText">--</div>
+                <div class="ip-line" id="ipText">IP: --</div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="section-title">窗口信息</h2>
+            <div class="info-grid">
+                <div class="label">备注:</div>
+                <div class="value" id="notesValue">--</div>
+                <div class="label">项目:</div>
+                <div class="value" id="projectValue">默认项目</div>
+                <div class="label">标签:</div>
+                <div class="value" id="tagsValue">--</div>
+            </div>
+
+            <div class="section-gap"></div>
+
+            <h2 class="section-title">指纹信息</h2>
+            <div class="info-grid">
+                <div class="label">系统/内核:</div>
+                <div class="value" id="kernelValue">--</div>
+                <div class="label">语言:</div>
+                <div class="value" id="languageValue">--</div>
+                <div class="label">User Agent:</div>
+                <div class="value" id="uaValue">--</div>
+            </div>
+        </section>
+
+        <div class="footer">
+            <div>IP 查询数据来源: <a id="sourceLink" href="https://ipwho.is/" target="_blank" rel="noreferrer">ipwho.is</a></div>
+            <div>version 1.0</div>
+        </div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const profileId = params.get('id') || '';
+        const refreshBtn = document.getElementById('refreshBtn');
+        const flagTextEl = document.getElementById('flagText');
+        let currentTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        let currentProfileLoaded = false;
+
+        function countryCodeToFlag(countryCode) {
+            const normalized = String(countryCode || '').trim().toUpperCase();
+            if (!/^[A-Z]{2}$/.test(normalized)) {
+                return '🌐';
+            }
+            return Array.from(normalized).map((char) => String.fromCodePoint(127397 + char.charCodeAt(0))).join('');
+        }
+
+        function updateFlag(countryCode) {
+            flagTextEl.textContent = countryCodeToFlag(countryCode);
+        }
+
+        function updateClock(timezone) {
+            const now = new Date();
+            const zone = timezone || currentTimezone || 'UTC';
+            const timeText = new Intl.DateTimeFormat('sv-SE', {
+                timeZone: zone,
+                hour12: false,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }).format(now).replace(' ', ' ');
+            document.getElementById('clockLine').textContent = `${zone} (GMT${formatOffset(zone, now)}) ${timeText}`;
+        }
+
+        function formatOffset(timezone, now) {
+            try {
+                const parts = new Intl.DateTimeFormat('en-US', {
+                    timeZone: timezone,
+                    timeZoneName: 'shortOffset'
+                }).formatToParts(now);
+                const offset = parts.find((item) => item.type === 'timeZoneName')?.value || 'GMT+00:00';
+                return offset.replace('GMT', '');
+            } catch (error) {
+                return '+00:00';
+            }
+        }
+
+        async function fetchJsonWithTimeout(url, timeout = 7000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(url, {
+                    cache: 'no-store',
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return await response.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function detectBrowserGeo() {
+            const probes = [
+                async () => {
+                    const ipSb = await fetchJsonWithTimeout('https://api.ip.sb/geoip');
+                    if (ipSb?.ip && ipSb?.country_code) {
+                        return {
+                            ip: ipSb.ip || '--',
+                            city: ipSb.city || '',
+                            region: ipSb.region || '',
+                            country: ipSb.country || '',
+                            countryCode: ipSb.country_code || '',
+                            timezone: ipSb.timezone || '',
+                            source: 'ip.sb'
+                        };
+                    }
+                    return null;
+                },
+                async () => {
+                    const ipapiCo = await fetchJsonWithTimeout('https://ipapi.co/json/');
+                    if (ipapiCo?.ip && ipapiCo?.country_code) {
+                        return {
+                            ip: ipapiCo.ip || '--',
+                            city: ipapiCo.city || '',
+                            region: ipapiCo.region || '',
+                            country: ipapiCo.country_name || '',
+                            countryCode: ipapiCo.country_code || '',
+                            timezone: ipapiCo.timezone || '',
+                            source: 'ipapi.co'
+                        };
+                    }
+                    return null;
+                },
+                async () => {
+                    const ipapiIs = await fetchJsonWithTimeout('https://api.ipapi.is');
+                    if (ipapiIs?.ip && ipapiIs?.location?.country_code) {
+                        return {
+                            ip: ipapiIs.ip || '--',
+                            city: ipapiIs.location?.city || '',
+                            region: ipapiIs.location?.state || '',
+                            country: ipapiIs.location?.country || '',
+                            countryCode: ipapiIs.location?.country_code || '',
+                            timezone: ipapiIs.location?.timezone || '',
+                            source: 'ipapi.is'
+                        };
+                    }
+                    return null;
+                }
+            ];
+
+            for (const probe of probes) {
+                try {
+                    const result = await probe();
+                    if (result) {
+                        return result;
+                    }
+                } catch (error) {
+                }
+            }
+
+            throw new Error('browser geo lookup failed');
+        }
+
+        function renderGeo(geo) {
+            const locationParts = [geo.country, geo.region, geo.city].filter(Boolean);
+            updateFlag(geo.countryCode);
+            document.getElementById('locationText').textContent = locationParts.length ? locationParts.join(' / ') : '--';
+            document.getElementById('ipText').textContent = `IP: ${geo.ip || '--'}`;
+
+            const sourceName = geo.source || '--';
+            const sourceLink = document.getElementById('sourceLink');
+            sourceLink.textContent = sourceName;
+            sourceLink.href = sourceName !== '--' ? `https://${sourceName}/` : '#';
+
+            if (geo.timezone) {
+                currentTimezone = geo.timezone;
+                updateClock(currentTimezone);
+            }
+        }
+
+        async function loadDashboard(refresh = false) {
+            if (!profileId) {
+                return;
+            }
+
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = refresh ? '检测中...' : '测试代理 IP';
+
+            try {
+                if (!currentProfileLoaded || !refresh) {
+                    const response = await fetch(`/api/dashboard?id=${encodeURIComponent(profileId)}`, {
+                        cache: 'no-store'
+                    });
+                    const data = await response.json();
+                    if (!data.ok) {
+                        throw new Error(data.error || '加载失败');
+                    }
+
+                    document.title = data.profile.name || '工作台';
+                    document.getElementById('profileName').textContent = (data.profile.name || 'JHX').slice(0, 12);
+                    document.getElementById('notesValue').textContent = data.profile.notes || '--';
+                    document.getElementById('projectValue').textContent = data.profile.project || '默认项目';
+                    document.getElementById('tagsValue').textContent = data.profile.tags || '--';
+                    document.getElementById('kernelValue').textContent = data.fingerprint.kernel || '--';
+                    document.getElementById('languageValue').textContent = data.fingerprint.language || '--';
+                    document.getElementById('uaValue').textContent = data.fingerprint.userAgent || '--';
+                    currentTimezone = data.fingerprint.timezone || currentTimezone;
+                    updateClock(currentTimezone);
+                    currentProfileLoaded = true;
+                }
+
+                const geo = await detectBrowserGeo();
+                renderGeo(geo);
+            } catch (error) {
+                document.getElementById('locationText').textContent = '加载失败';
+                document.getElementById('ipText').textContent = 'IP: --';
+                updateFlag('');
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '测试代理 IP';
+            }
+        }
+
+        refreshBtn.addEventListener('click', () => loadDashboard(true));
+        loadDashboard(false);
+        setInterval(() => updateClock(currentTimezone), 1000);
+    </script>
+</body>
+</html>

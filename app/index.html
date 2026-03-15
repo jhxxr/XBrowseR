@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XBrowseR</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">XB</div>
+                <div>
+                    <div class="brand-title">XBrowseR</div>
+                    <div class="brand-subtitle">Mihomo Fingerprint Browser</div>
+                </div>
+            </div>
+
+            <button class="nav-btn active" data-view="home">全部窗口</button>
+            <button class="nav-btn" data-view="create">创建窗口</button>
+            <button class="nav-btn" data-view="proxies">代理 IP</button>
+            <button class="nav-btn" data-view="api">API & AI MCP</button>
+
+            <div class="sidebar-card">
+                <div class="sidebar-label">运行状态</div>
+                <div id="sidebarRuntime" class="sidebar-value">加载中</div>
+                <button id="openDataDirBtn" class="ghost-btn">打开数据目录</button>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div>
+                    <div class="eyebrow">CURRENT PROJECT</div>
+                    <h1>全新根目录项目</h1>
+                </div>
+                <div id="topbarHint" class="topbar-hint">等待初始化</div>
+            </header>
+
+            <section id="view-home" class="view active">
+                <div class="summary-strip">
+                    <div class="summary-card">
+                        <div class="stat-label">窗口总数</div>
+                        <div id="statProfiles" class="summary-value">0</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="stat-label">可用代理</div>
+                        <div id="statProxies" class="summary-value">0</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="stat-label">运行中窗口</div>
+                        <div id="statRunning" class="summary-value">0</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-kicker">窗口管理</div>
+                            <h2>全部窗口</h2>
+                        </div>
+                        <div class="panel-actions">
+                            <button id="gotoCreateBtn" class="ghost-btn">创建窗口</button>
+                            <button id="refreshHomeBtn" class="ghost-btn">刷新</button>
+                        </div>
+                    </div>
+
+                    <div class="list-toolbar">
+                        <div class="filter-tabs">
+                            <button class="tab-chip active" data-filter="all">全部窗口</button>
+                            <button class="tab-chip" data-filter="running">已打开</button>
+                            <button class="tab-chip" data-filter="stopped">未启动</button>
+                        </div>
+                        <div class="search-wrap">
+                            <input id="homeSearchInput" type="text" placeholder="搜索窗口名称、标签、代理">
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>编号</th>
+                                    <th>窗口名称</th>
+                                    <th>代理</th>
+                                    <th>标签</th>
+                                    <th>最后打开</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="profileTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-create" class="view">
+                <div class="hero-grid">
+                    <div class="hero-panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">单个创建</div>
+                                <h2>创建窗口</h2>
+                            </div>
+                            <div class="panel-tag">指纹 + 代理 + 隔离存储</div>
+                        </div>
+
+                        <div class="preset-bar">
+                            <button type="button" class="small-btn preset-url-btn" data-url="">内置启动页</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IP 检查</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="https://bot.sannysoft.com/">SannySoft</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
+                            <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
+                        </div>
+
+                        <form id="profileForm" class="profile-form">
+                            <input type="hidden" id="profileId">
+
+                            <label>
+                                <span>窗口名称</span>
+                                <input id="profileName" type="text" placeholder="例如：HK-Shop-01" required>
+                            </label>
+
+                            <label>
+                                <span>启动网址</span>
+                                <input id="profileStartUrl" type="text" placeholder="留空使用内置启动页">
+                            </label>
+
+                            <div class="grid two">
+                                <label>
+                                    <span>平台</span>
+                                    <select id="profilePlatform">
+                                        <option value="Win32">Win32</option>
+                                        <option value="MacIntel">MacIntel</option>
+                                    </select>
+                                </label>
+
+                                <label>
+                                    <span>代理 IP</span>
+                                    <select id="profileProxyId"></select>
+                                </label>
+                            </div>
+
+                            <label>
+                                <span>User-Agent</span>
+                                <textarea id="profileUserAgent" rows="3"></textarea>
+                            </label>
+
+                            <div class="grid four">
+                                <label>
+                                    <span>语言</span>
+                                    <input id="profileLanguage" type="text" placeholder="留空则按 IP 自动">
+                                </label>
+                                <label>
+                                    <span>时区</span>
+                                    <input id="profileTimezone" type="text" placeholder="留空则按 IP 自动">
+                                </label>
+                                <label>
+                                    <span>CPU 线程</span>
+                                    <input id="profileHardware" type="number" min="2" max="32">
+                                </label>
+                                <label>
+                                    <span>内存(GB)</span>
+                                    <input id="profileMemory" type="number" min="2" max="32">
+                                </label>
+                            </div>
+
+                            <div class="grid two">
+                                <label>
+                                    <span>分辨率宽</span>
+                                    <input id="profileWidth" type="number" min="800">
+                                </label>
+                                <label>
+                                    <span>分辨率高</span>
+                                    <input id="profileHeight" type="number" min="600">
+                                </label>
+                            </div>
+
+                            <label>
+                                <span>标签</span>
+                                <input id="profileTags" type="text" placeholder="shop, hk, chrome145">
+                            </label>
+
+                            <label>
+                                <span>备注</span>
+                                <textarea id="profileNotes" rows="3" placeholder="用于记录账号、环境用途或操作说明"></textarea>
+                            </label>
+
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">保存窗口</button>
+                                <button type="button" id="randomizeBtn" class="ghost-btn">随机指纹</button>
+                                <button type="button" id="resetFormBtn" class="ghost-btn">清空表单</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="hero-aside">
+                        <div class="preview-card create-preview">
+                            <div class="preview-title">当前指纹摘要</div>
+                            <pre id="fingerprintPreview">等待输入</pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-proxies" class="view">
+                <div class="proxy-layout">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">手动节点</div>
+                                <h2>代理录入</h2>
+                            </div>
+                        </div>
+                        <form id="manualProxyForm" class="stack-form">
+                            <label>
+                                <span>节点名称</span>
+                                <input id="manualProxyName" type="text" placeholder="例如：HK-Residential-01">
+                            </label>
+                            <label>
+                                <span>节点链接</span>
+                                <textarea id="manualProxyUrl" rows="4" placeholder="vmess://, vless://, trojan://, ss://, hy2://, tuic://"></textarea>
+                            </label>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">添加节点</button>
+                                <button type="button" id="importProxyFileBtn" class="ghost-btn">导入节点文件</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">订阅导入</div>
+                                <h2>远程节点</h2>
+                            </div>
+                        </div>
+                        <form id="subscriptionForm" class="stack-form">
+                            <label>
+                                <span>订阅名称</span>
+                                <input id="subscriptionName" type="text" placeholder="例如：Airport-HK">
+                            </label>
+                            <label>
+                                <span>订阅地址</span>
+                                <input id="subscriptionUrl" type="text" placeholder="https://example.com/sub">
+                            </label>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">导入订阅</button>
+                            </div>
+                        </form>
+
+                        <div class="sub-list-wrap">
+                            <div class="sub-list-title">已保存订阅</div>
+                            <div id="subscriptionList" class="sub-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-kicker">节点列表</div>
+                            <h2>代理 IP 列表</h2>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>名称</th>
+                                    <th>协议</th>
+                                    <th>来源</th>
+                                    <th>延迟</th>
+                                    <th>更新时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="proxyTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-api" class="view">
+                <div class="api-grid">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">本地服务</div>
+                                <h2>API / MCP</h2>
+                            </div>
+                        </div>
+
+                        <form id="apiForm" class="stack-form">
+                            <div class="grid two">
+                                <label>
+                                    <span>启用 API</span>
+                                    <select id="apiEnabled">
+                                        <option value="true">开启</option>
+                                        <option value="false">关闭</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>端口</span>
+                                    <input id="apiPort" type="number" min="1024" max="65535">
+                                </label>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">保存 API 配置</button>
+                            </div>
+                        </form>
+
+                        <div id="apiStatusCard" class="status-card"></div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">可调用接口</div>
+                                <h2>本地文档</h2>
+                            </div>
+                        </div>
+                        <pre id="apiDocs" class="api-docs"></pre>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="./renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Tab</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg-top: #0d1726;
+            --bg-bottom: #070d16;
+            --surface: rgba(15, 23, 36, 0.72);
+            --surface-strong: rgba(18, 28, 44, 0.88);
+            --line-soft: rgba(255, 255, 255, 0.06);
+            --text: #f5f8ff;
+            --muted: rgba(223, 232, 247, 0.68);
+            --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+            --tile-shadow: 0 14px 32px rgba(0, 0, 0, 0.24);
+            --font: "Segoe UI Variable", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: var(--font);
+            color: var(--text);
+            background:
+                radial-gradient(circle at 16% 18%, rgba(92, 140, 255, 0.22), transparent 28%),
+                radial-gradient(circle at 84% 22%, rgba(46, 197, 255, 0.16), transparent 24%),
+                radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.08), transparent 34%),
+                linear-gradient(180deg, var(--bg-top) 0%, #0b1320 42%, var(--bg-bottom) 100%);
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            width: 34vw;
+            height: 34vw;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.22;
+            pointer-events: none;
+        }
+
+        body::before {
+            top: -10vw;
+            right: -8vw;
+            background: #4f7cff;
+        }
+
+        body::after {
+            bottom: -14vw;
+            left: -10vw;
+            background: #28d7ff;
+        }
+
+        .page {
+            position: relative;
+            min-height: 100%;
+            padding: 24px 28px 18px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--line-soft);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+            user-select: none;
+        }
+
+        .brand-mark {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #85c8ff, #4f7cff);
+            box-shadow: 0 0 22px rgba(92, 140, 255, 0.45);
+        }
+
+        .brand-name {
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgba(245, 248, 255, 0.9);
+        }
+
+        .clock {
+            padding: 10px 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--line-soft);
+            backdrop-filter: blur(18px);
+            text-align: right;
+            min-width: 132px;
+        }
+
+        .clock-time {
+            display: block;
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        .clock-date {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .hero {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 24px 0 8px;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--line-soft);
+            color: var(--muted);
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            backdrop-filter: blur(18px);
+        }
+
+        .hero-title {
+            margin: 24px 0 14px;
+            font-size: clamp(36px, 5vw, 66px);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+        }
+
+        .hero-subtitle {
+            margin: 0 0 28px;
+            max-width: 580px;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.7;
+        }
+
+        .search-shell {
+            width: min(760px, calc(100vw - 48px));
+            padding: 12px;
+            border-radius: 28px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04));
+            box-shadow: var(--shadow);
+        }
+
+        .search-form {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            padding: 8px 10px 8px 18px;
+            border-radius: 20px;
+            background: var(--surface-strong);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(24px);
+        }
+
+        .search-icon {
+            width: 20px;
+            height: 20px;
+            flex: 0 0 auto;
+            opacity: 0.72;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: var(--text);
+            font-size: 18px;
+            padding: 14px 0;
+        }
+
+        .search-input::placeholder {
+            color: rgba(223, 232, 247, 0.46);
+        }
+
+        .search-submit {
+            border: 0;
+            cursor: pointer;
+            padding: 12px 18px;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #f8fbff;
+            background: linear-gradient(135deg, #5c8cff, #3ac6ff);
+            box-shadow: 0 12px 24px rgba(54, 117, 255, 0.28);
+            transition: transform 120ms ease, box-shadow 120ms ease;
+        }
+
+        .search-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 28px rgba(54, 117, 255, 0.34);
+        }
+
+        .search-submit:active {
+            transform: translateY(0);
+        }
+
+        .shortcuts {
+            margin-top: 28px;
+            width: min(920px, 100%);
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .tile {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 20px 14px 18px;
+            border-radius: 24px;
+            text-decoration: none;
+            color: var(--text);
+            background: var(--surface);
+            border: 1px solid var(--line-soft);
+            backdrop-filter: blur(18px);
+            box-shadow: var(--tile-shadow);
+            transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+        }
+
+        .tile:hover {
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.18);
+            background: rgba(22, 32, 48, 0.82);
+        }
+
+        .tile-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 18px;
+            display: grid;
+            place-items: center;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: white;
+        }
+
+        .tile-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .tile-url {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .tile-icon.google { background: linear-gradient(135deg, #4285f4, #34a853); }
+        .tile-icon.youtube { background: linear-gradient(135deg, #ff4e45, #c81d25); }
+        .tile-icon.github { background: linear-gradient(135deg, #59657a, #202734); }
+        .tile-icon.gmail { background: linear-gradient(135deg, #ff7a59, #ea4335); }
+        .tile-icon.sannysoft { background: linear-gradient(135deg, #55d6ff, #2f7bff); }
+        .tile-icon.browserleaks { background: linear-gradient(135deg, #00c39a, #0f8f7a); }
+        .tile-icon.pixelscan { background: linear-gradient(135deg, #8e6bff, #3c7dff); }
+        .tile-icon.webrtc { background: linear-gradient(135deg, #ffb34d, #ff6b3d); }
+
+        .footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding-top: 18px;
+            color: rgba(223, 232, 247, 0.52);
+            font-size: 12px;
+        }
+
+        .footer-button {
+            border: 1px solid var(--line-soft);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(245, 248, 255, 0.88);
+            border-radius: 999px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font: inherit;
+            transition: background 120ms ease, border-color 120ms ease;
+        }
+
+        .footer-button:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.14);
+        }
+
+        @media (max-width: 960px) {
+            .page {
+                padding: 20px 18px 16px;
+            }
+
+            .shortcuts {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 14px;
+            }
+
+            .hero-title {
+                margin-top: 20px;
+            }
+
+            .search-shell {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body {
+                overflow: auto;
+            }
+
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .clock {
+                min-width: 0;
+                width: 100%;
+                text-align: left;
+            }
+
+            .search-form {
+                padding-right: 8px;
+            }
+
+            .search-submit {
+                padding: 12px 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand" aria-label="XBrowseR New Tab">
+                <span class="brand-mark"></span>
+                <span class="brand-name">XBrowseR</span>
+            </div>
+            <div class="clock" aria-live="polite">
+                <span class="clock-time" id="clockTime">--:--</span>
+                <span class="clock-date" id="clockDate">----</span>
+            </div>
+        </header>
+
+        <main class="hero">
+            <div class="hero-badge">New Tab</div>
+            <h1 class="hero-title">搜索或输入网址</h1>
+            <p class="hero-subtitle">像正常浏览器新标签页一样开始访问，而不是先进入工具面板。</p>
+
+            <div class="search-shell">
+                <form class="search-form" id="searchForm" autocomplete="off">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"></circle>
+                        <path d="M16 16L21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+                    </svg>
+                    <input
+                        class="search-input"
+                        id="searchInput"
+                        type="text"
+                        inputmode="search"
+                        placeholder="搜索 Google 或输入网址"
+                        spellcheck="false"
+                        autofocus
+                    >
+                    <button class="search-submit" type="submit">前往</button>
+                </form>
+            </div>
+
+            <section class="shortcuts" aria-label="常用网站">
+                <a class="tile" href="https://www.google.com/">
+                    <span class="tile-icon google">G</span>
+                    <span class="tile-title">Google</span>
+                    <span class="tile-url">www.google.com</span>
+                </a>
+                <a class="tile" href="https://www.youtube.com/">
+                    <span class="tile-icon youtube">Y</span>
+                    <span class="tile-title">YouTube</span>
+                    <span class="tile-url">www.youtube.com</span>
+                </a>
+                <a class="tile" href="https://github.com/">
+                    <span class="tile-icon github">GH</span>
+                    <span class="tile-title">GitHub</span>
+                    <span class="tile-url">github.com</span>
+                </a>
+                <a class="tile" href="https://mail.google.com/">
+                    <span class="tile-icon gmail">M</span>
+                    <span class="tile-title">Gmail</span>
+                    <span class="tile-url">mail.google.com</span>
+                </a>
+                <a class="tile" href="https://bot.sannysoft.com/">
+                    <span class="tile-icon sannysoft">S</span>
+                    <span class="tile-title">SannySoft</span>
+                    <span class="tile-url">bot.sannysoft.com</span>
+                </a>
+                <a class="tile" href="https://browserleaks.com/javascript">
+                    <span class="tile-icon browserleaks">BL</span>
+                    <span class="tile-title">BrowserLeaks</span>
+                    <span class="tile-url">browserleaks.com</span>
+                </a>
+                <a class="tile" href="https://pixelscan.net/">
+                    <span class="tile-icon pixelscan">P</span>
+                    <span class="tile-title">PixelScan</span>
+                    <span class="tile-url">pixelscan.net</span>
+                </a>
+                <a class="tile" href="https://browserleaks.com/webrtc">
+                    <span class="tile-icon webrtc">W</span>
+                    <span class="tile-title">WebRTC</span>
+                    <span class="tile-url">browserleaks.com/webrtc</span>
+                </a>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <button class="footer-button" id="focusSearch" type="button">聚焦搜索</button>
+            <span>本地新标签页</span>
+        </footer>
+    </div>
+
+    <script>
+        const timeEl = document.getElementById('clockTime');
+        const dateEl = document.getElementById('clockDate');
+        const inputEl = document.getElementById('searchInput');
+        const formEl = document.getElementById('searchForm');
+        const focusButtonEl = document.getElementById('focusSearch');
+
+        function updateClock() {
+            const now = new Date();
+            timeEl.textContent = new Intl.DateTimeFormat('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(now);
+            dateEl.textContent = new Intl.DateTimeFormat('zh-CN', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric'
+            }).format(now);
+        }
+
+        function toTarget(value) {
+            const raw = value.trim();
+            if (!raw) {
+                return '';
+            }
+
+            const hasProtocol = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(raw);
+            if (hasProtocol) {
+                return raw;
+            }
+
+            const looksLikeLocalhost = /^localhost(?::\d+)?(?:\/.*)?$/i.test(raw);
+            const looksLikeDomain = /^(?:[\w-]+\.)+[a-zA-Z]{2,}(?::\d+)?(?:\/.*)?$/.test(raw);
+            const looksLikeIPv4 = /^(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?:\/.*)?$/.test(raw);
+            const hasWhitespace = /\s/.test(raw);
+
+            if (!hasWhitespace && (looksLikeLocalhost || looksLikeDomain || looksLikeIPv4)) {
+                return `https://${raw}`;
+            }
+
+            return `https://www.google.com/search?q=${encodeURIComponent(raw)}`;
+        }
+
+        function submitSearch(event) {
+            event.preventDefault();
+            const target = toTarget(inputEl.value);
+            if (!target) {
+                inputEl.focus();
+                return;
+            }
+            window.location.href = target;
+        }
+
+        formEl.addEventListener('submit', submitSearch);
+        focusButtonEl.addEventListener('click', () => inputEl.focus());
+
+        window.addEventListener('keydown', (event) => {
+            const isTypingKey = event.key.length === 1 && /[a-zA-Z0-9]/.test(event.key);
+            if ((event.key === '/' || isTypingKey) && document.activeElement !== inputEl) {
+                inputEl.focus();
+                if (isTypingKey) {
+                    inputEl.value = event.key;
+                }
+                event.preventDefault();
+            }
+        });
+
+        updateClock();
+        setInterval(updateClock, 1000);
+        inputEl.focus();
+    </script>
+</body>
+</html>

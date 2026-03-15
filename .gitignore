@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+release/
+
+# Runtime data
+data/
+*.log
+
+# Downloaded Mihomo artifacts
+bin/*
+!bin/README.md
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Tooling caches
+.cache/
+coverage/
+*.tsbuildinfo
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
