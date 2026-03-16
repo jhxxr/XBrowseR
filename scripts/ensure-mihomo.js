@@ -1,13 +1,14 @@
 const path = require('path');
-const { ensureBundledMihomo, MIHOMO_VERSION } = require('../lib/mihomo-download');
+const { ensureBundledMihomo, resolveLatestMihomoRelease } = require('../lib/mihomo-download');
 
 async function main() {
     const baseDir = path.resolve(__dirname, '..');
+    const release = await resolveLatestMihomoRelease();
     const binaryPath = await ensureBundledMihomo(baseDir);
-    console.log(`Mihomo ${MIHOMO_VERSION} ready: ${binaryPath}`);
+    console.log(`Mihomo ${release.version} ready: ${binaryPath}`);
 }
 
 main().catch((error) => {
-    console.error(`Failed to prepare Mihomo ${MIHOMO_VERSION}:`, error);
+    console.error('Failed to prepare Mihomo:', error);
     process.exitCode = 1;
 });

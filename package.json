@@ -7,10 +7,12 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "ensure:browser": "node scripts/ensure-browser.js",
     "ensure:mihomo": "node scripts/ensure-mihomo.js",
-    "postinstall": "node scripts/ensure-mihomo.js",
-    "dist": "npm run ensure:mihomo && electron-builder --win nsis",
-    "pack": "npm run ensure:mihomo && electron-builder --dir"
+    "ensure:assets": "npm run ensure:mihomo && npm run ensure:browser",
+    "postinstall": "npm run ensure:assets",
+    "dist": "npm run ensure:assets && electron-builder --win nsis",
+    "pack": "npm run ensure:assets && electron-builder --dir"
   },
   "dependencies": {
     "extract-zip": "^2.0.1",

@@ -17,6 +17,7 @@ const { createAgentController } = require('./lib/ai-agent');
 const { createEmptyAgentRuntimeState } = require('./lib/agent-runtime');
 const { createProfileSyncController, createEmptySyncState } = require('./lib/profile-sync');
 const { createFingerprint, buildDefaultSpeechVoices } = require('./lib/fingerprint');
+const { ensureBundledBrowser, resolveBrowserExecutable } = require('./lib/browser-download');
 const { parseProxyLink, parseSubscriptionContent, startCore, waitForMihomoReady, stopProcess, getBinaryPath } = require('./lib/mihomo');
 const { ensureBundledMihomo, MIHOMO_VERSION } = require('./lib/mihomo-download');
 const { ensureFingerprintExtension, createPageScript } = require('./lib/chrome-extension');
@@ -71,16 +72,6 @@ function getDefaultStartPageUrl(profileId = '') {
     }
     const query = profileId ? `?id=${encodeURIComponent(profileId)}` : '';
     return `http://127.0.0.1:${internalServerPort}/dashboard${query}`;
-}
-
-function resolveBrowserExecutable() {
-    const candidates = [
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files\\Chromium\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
-    ];
-    return candidates.find(candidate => fs.existsSync(candidate)) || '';
 }
 
 function generateProfileCode(existingProfiles = []) {
@@ -2771,7 +2762,7 @@ function buildState() {
             apiUrl: settings?.api?.enabled ? `http://127.0.0.1:${settings.api.port}` : '',
             mihomoBinary: getBinaryPath(BASE_DIR),
             mihomoReady: fs.existsSync(getBinaryPath(BASE_DIR)),
-            browserBinary: resolveBrowserExecutable(),
+            browserBinary: resolveBrowserExecutable(BASE_DIR),
             running: Array.from(runningProfiles.entries()).map(([id, runtime]) => ({
                 id,
                 port: runtime.port,
@@ -2900,7 +2891,12 @@ async function openProfile(profileId, { requestId = '' } = {}) {
 
     reportLaunchProgress(profile, requestId, 6, 'prepare', '校验浏览器环境');
 
-    const browserBinary = resolveBrowserExecutable();
+    let browserBinary = resolveBrowserExecutable(BASE_DIR);
+    if (!browserBinary) {
+        reportLaunchProgress(profile, requestId, 8, 'browser-download', '准备内置浏览器内核');
+        await ensureBundledBrowser(BASE_DIR);
+        browserBinary = resolveBrowserExecutable(BASE_DIR);
+    }
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 0, 'error', '未找到 Chrome 或 Chromium', { error: true, done: true });
         throw new Error('未找到 Chrome 或 Chromium 可执行文件');
