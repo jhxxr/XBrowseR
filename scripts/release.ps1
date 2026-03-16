@@ -48,7 +48,12 @@ if (-not $version) {
 }
 
 $tag = "v$version"
-$existingLocalTag = (git tag --list $tag).Trim()
+$existingLocalTagOutput = git tag --list $tag
+$existingLocalTag = if ($null -ne $existingLocalTagOutput) {
+    [string]$existingLocalTagOutput | ForEach-Object { $_.Trim() }
+} else {
+    ''
+}
 if ($existingLocalTag -eq $tag) {
     throw "Local tag already exists: $tag"
 }
