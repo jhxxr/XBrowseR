@@ -68,7 +68,7 @@ let appState = {
         proxies: [],
         subscriptions: [],
         api: { enabled: true, port: 23919 },
-        agent: { providers: [], activeProviderId: '', toolTimeoutMs: 20000 },
+        agent: { providers: [], activeProviderId: '', toolTimeoutMs: 20000, maxExecutionSteps: 10 },
         ui: { activeView: 'home', homeProjectId: 'all' }
     },
     runtime: {
@@ -149,6 +149,7 @@ const agentActiveProviderBadge = document.getElementById('agentActiveProviderBad
 const providerModelsHint = document.getElementById('providerModelsHint');
 const agentFormatDocs = document.getElementById('agentFormatDocs');
 const agentToolTimeoutInput = document.getElementById('agentToolTimeoutMs');
+const agentMaxExecutionStepsInput = document.getElementById('agentMaxExecutionSteps');
 
 let homeFilter = 'all';
 let homeProjectId = 'all';
@@ -277,6 +278,10 @@ function getActiveProvider() {
 
 function getAgentToolTimeoutMs() {
     return Math.max(5000, Math.min(60000, Number(appState.settings.agent?.toolTimeoutMs) || 20000));
+}
+
+function getAgentMaxExecutionSteps() {
+    return Math.max(3, Math.min(50, Number(appState.settings.agent?.maxExecutionSteps) || 10));
 }
 
 function getSyncState() {
@@ -1263,13 +1268,17 @@ function readAgentProviderPayload() {
 
 function readAgentSettingsPayload() {
     return {
-        toolTimeoutMs: Math.max(5000, Math.min(60000, Number(agentToolTimeoutInput.value) || 20000))
+        toolTimeoutMs: Math.max(5000, Math.min(60000, Number(agentToolTimeoutInput.value) || 20000)),
+        maxExecutionSteps: Math.max(3, Math.min(50, Number(agentMaxExecutionStepsInput.value) || 10))
     };
 }
 
 function renderAgentSettings() {
     if (agentToolTimeoutInput) {
         agentToolTimeoutInput.value = String(getAgentToolTimeoutMs());
+    }
+    if (agentMaxExecutionStepsInput) {
+        agentMaxExecutionStepsInput.value = String(getAgentMaxExecutionSteps());
     }
 }
 

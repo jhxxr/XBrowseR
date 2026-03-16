@@ -3294,7 +3294,8 @@ app.whenReady().then(async () => {
         getAgentSettings: () => ({
             provider: getActiveAgentProvider(),
             profiles,
-            toolTimeoutMs: settings.agent.toolTimeoutMs
+            toolTimeoutMs: settings.agent.toolTimeoutMs,
+            maxExecutionSteps: settings.agent.maxExecutionSteps
         }),
         getProfile: (profileId) => getProfile(profileId),
         ensureRuntime: async (profileId) => {
