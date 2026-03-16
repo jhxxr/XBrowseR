@@ -1,11 +1,11 @@
 const path = require('path');
-const { ensureBundledBrowser, resolveChromeDownload, CFT_CHANNEL } = require('../lib/browser-download');
+const { ensureBundledBrowser, getInstalledBrowserVersion, CFT_CHANNEL } = require('../lib/browser-download');
 
 async function main() {
     const baseDir = path.resolve(__dirname, '..');
-    const download = await resolveChromeDownload();
     const executablePath = await ensureBundledBrowser(baseDir);
-    console.log(`Chrome for Testing ${download.version} (${CFT_CHANNEL}) ready: ${executablePath}`);
+    const version = await getInstalledBrowserVersion(baseDir);
+    console.log(`Chrome for Testing ${version || 'unknown'} (${CFT_CHANNEL}) ready: ${executablePath}`);
 }
 
 main().catch((error) => {

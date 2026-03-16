@@ -24,8 +24,13 @@ const { ensureFingerprintExtension, createPageScript } = require('./lib/chrome-e
 const { PROVIDER_FORMATS, buildProviderRecord, ensureAgentSettings, fetchModelsForProvider } = require('./lib/llm-provider');
 
 const BASE_DIR = __dirname;
-const store = createStore(BASE_DIR);
-const accountStore = createAccountStore(BASE_DIR);
+const DATA_ROOT_DIR = app.isPackaged ? path.dirname(process.execPath) : BASE_DIR;
+const APP_DATA_DIR = path.join(DATA_ROOT_DIR, 'data');
+app.setPath('userData', path.join(APP_DATA_DIR, 'electron'));
+app.setPath('sessionData', path.join(APP_DATA_DIR, 'session'));
+app.setAppLogsPath(path.join(APP_DATA_DIR, 'logs'));
+const store = createStore(DATA_ROOT_DIR);
+const accountStore = createAccountStore(DATA_ROOT_DIR);
 const PROFILE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DEFAULT_PROJECT_ID = 'default';
 const DEFAULT_PROJECT_COLOR = '#0f766e';
