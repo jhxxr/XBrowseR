@@ -11,8 +11,8 @@
     "ensure:mihomo": "node scripts/ensure-mihomo.js",
     "ensure:assets": "npm run ensure:mihomo && npm run ensure:browser",
     "postinstall": "npm run ensure:assets",
-    "dist": "npm run ensure:assets && electron-builder --win nsis",
-    "pack": "npm run ensure:assets && electron-builder --dir"
+    "dist": "npm run ensure:assets && electron-builder --win nsis --publish never",
+    "pack": "npm run ensure:assets && electron-builder --dir --publish never"
   },
   "dependencies": {
     "extract-zip": "^2.0.1",
