@@ -30,9 +30,25 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
                     代理管理
                 </button>
+                <button class="nav-btn" data-view="extensions">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m20 7-8-4-8 4 8 4 8-4Z"/><path d="m4 12 8 4 8-4"/><path d="m4 17 8 4 8-4"/></svg>
+                    扩展中心
+                </button>
+                <button class="nav-btn" data-view="accounts">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+                    账号库
+                </button>
+                <button class="nav-btn" data-view="trash">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    回收站
+                </button>
                 <button class="nav-btn" data-view="api">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
                     AI Agent
+                </button>
+                <button class="nav-btn" data-view="sync">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2"/><path d="M7 7H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 8h4"/><path d="M10 12h4"/><path d="M10 16h4"/></svg>
+                    同步器
                 </button>
             </nav>
 
@@ -79,6 +95,8 @@
                         </div>
                         <div class="panel-actions">
                             <button id="gotoCreateBtn" class="primary-btn">创建环境</button>
+                            <button id="importProfilesBtn" class="ghost-btn">导入环境</button>
+                            <button id="exportProfilesBtn" class="ghost-btn">导出全部</button>
                             <button id="refreshHomeBtn" class="ghost-btn">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-10.45l5.28 4.88"/></svg>
                             </button>
@@ -92,6 +110,24 @@
                             <button class="tab-chip" data-filter="stopped">未启动</button>
                         </div>
                         <div class="search-wrap">
+                            <select id="batchProxyId"></select>
+                        </div>
+                        <div class="search-wrap">
+                            <button id="batchBindProxyBtn" class="ghost-btn">批量绑定代理</button>
+                        </div>
+                        <div class="search-wrap">
+                            <select id="batchMoveProjectId"></select>
+                        </div>
+                        <div class="search-wrap">
+                            <button id="batchMoveBtn" class="ghost-btn">批量移动</button>
+                        </div>
+                        <div class="search-wrap">
+                            <button id="clearProfileSelectionBtn" class="ghost-btn">清空选择</button>
+                        </div>
+                        <div class="search-wrap">
+                            <select id="homeProjectFilter"></select>
+                        </div>
+                        <div class="search-wrap">
                             <input id="homeSearchInput" type="text" placeholder="搜索环境名、标签、备注...">
                         </div>
                     </div>
@@ -100,6 +136,7 @@
                         <table>
                             <thead>
                                 <tr>
+                                    <th><input id="selectAllProfiles" type="checkbox"></th>
                                     <th>编号</th>
                                     <th>环境信息</th>
                                     <th>代理网络</th>
@@ -115,10 +152,171 @@
                 </div>
             </section>
 
-            <section id="view-create" class="view">
-                <div class="hero-grid">
-                    <div class="hero-panel">
+            <section id="view-trash" class="view">
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-kicker">回收站</div>
+                            <h2>已移除的环境</h2>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>编号</th>
+                                    <th>环境信息</th>
+                                    <th>原项目</th>
+                                    <th>移入时间</th>
+                                    <th style="text-align: right;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trashTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-extensions" class="view">
+                <div class="panel">
+                    <div class="panel-head">
+                        <div>
+                            <div class="panel-kicker">用户扩展</div>
+                            <h2>扩展管理与批量绑定</h2>
+                        </div>
+                        <div class="panel-actions">
+                            <button id="importExtensionBtn" class="primary-btn">导入扩展目录</button>
+                            <button id="importCrxExtensionBtn" class="ghost-btn">导入 CRX</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>扩展信息</th>
+                                    <th>版本</th>
+                                    <th>来源</th>
+                                    <th>范围</th>
+                                    <th>状态</th>
+                                    <th>绑定环境</th>
+                                    <th style="text-align: right;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="extensionTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-accounts" class="view">
+                <div class="proxy-layout">
+                    <div class="panel">
                         <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">账号资料</div>
+                                <h2>保存账号与环境绑定</h2>
+                            </div>
+                        </div>
+                        <form id="accountForm" class="stack-form">
+                            <input type="hidden" id="accountId">
+
+                            <div class="grid two">
+                                <label>
+                                    <span>平台</span>
+                                    <input id="accountPlatform" type="text" placeholder="例如：Google / TikTok / Amazon" required>
+                                </label>
+                                <label>
+                                    <span>用户名</span>
+                                    <input id="accountUsername" type="text" placeholder="登录用户名或账号名">
+                                </label>
+                            </div>
+
+                            <div class="grid two">
+                                <label>
+                                    <span>密码</span>
+                                    <input id="accountPassword" type="text" placeholder="密码或登录凭据">
+                                </label>
+                                <label>
+                                    <span>邮箱</span>
+                                    <input id="accountEmail" type="text" placeholder="绑定邮箱">
+                                </label>
+                            </div>
+
+                            <div class="grid two">
+                                <label>
+                                    <span>手机号</span>
+                                    <input id="accountPhone" type="text" placeholder="绑定手机号">
+                                </label>
+                                <label>
+                                    <span>二步验证码密钥</span>
+                                    <input id="accountTwoFactorSecret" type="text" placeholder="TOTP Secret">
+                                </label>
+                            </div>
+
+                            <div class="grid two">
+                                <label>
+                                    <span>绑定环境</span>
+                                    <select id="accountProfileId"></select>
+                                </label>
+                                <label>
+                                    <span>状态</span>
+                                    <select id="accountStatus">
+                                        <option value="active">可用</option>
+                                        <option value="idle">闲置</option>
+                                        <option value="blocked">受限</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <label>
+                                <span>备注</span>
+                                <textarea id="accountNotes" rows="3" placeholder="记录用途、来源、恢复方式或其它说明"></textarea>
+                            </label>
+
+                            <div class="sub-list-wrap">
+                                <div class="sub-list-title">绑定扩展</div>
+                                <div id="profileExtensionList" class="sub-actions"></div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">保存账号</button>
+                                <button type="button" id="resetAccountBtn" class="ghost-btn">新建账号</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">账号列表</div>
+                                <h2>已保存账号</h2>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>平台 / 账号</th>
+                                        <th>联系方式</th>
+                                        <th>绑定环境</th>
+                                        <th>状态</th>
+                                        <th>更新时间</th>
+                                        <th style="text-align: right;">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accountTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-create" class="view">
+                <div class="create-layout-grid">
+                    
+                    <!-- LEFT COLUMN -->
+                    <div class="create-main-col">
+                        <div class="panel-head" style="margin-bottom: 24px;">
                             <div>
                                 <div class="panel-kicker">指纹配置</div>
                                 <h2>创建独立浏览器环境</h2>
@@ -126,97 +324,194 @@
                             <div class="panel-tag">指纹特征隔离</div>
                         </div>
 
-                        <div class="preset-bar">
-                            <button type="button" class="small-btn preset-url-btn" data-url="">内置看板页</button>
-                            <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IPinfo</button>
-                            <button type="button" class="small-btn preset-url-btn" data-url="https://bot.sannysoft.com/">SannySoft</button>
-                            <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
-                            <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
-                        </div>
-
-                        <form id="profileForm" class="profile-form">
+                        <form id="profileForm" class="profile-form stack-form">
                             <input type="hidden" id="profileId">
+                            <input type="hidden" id="profileTemplateId">
+                            <input type="hidden" id="templateEditorId">
 
-                            <div class="grid two">
+                            <!-- Card 1: Basic Info -->
+                            <div class="form-panel">
+                                <div class="form-section-title">基础运行信息 (Basic Info)</div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>环境名称 Name</span>
+                                        <input id="profileName" type="text" placeholder="例如：Project-A-Worker01" required>
+                                    </label>
+                                    <label>
+                                        <span>环境所属项目</span>
+                                        <select id="profileProjectId"></select>
+                                    </label>
+                                </div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>操作系统预设 Platform</span>
+                                        <select id="profilePlatform">
+                                            <option value="Win32">Windows System</option>
+                                            <option value="MacIntel">macOS System</option>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>绑定标签 Tags</span>
+                                        <input id="profileTags" type="text" placeholder="以逗号分割：shop, dev, test">
+                                    </label>
+                                </div>
                                 <label>
-                                    <span>环境名称 Name</span>
-                                    <input id="profileName" type="text" placeholder="例如：Project-A-Worker01" required>
-                                </label>
-                                <label>
-                                    <span>启动网址 Startup URL</span>
-                                    <input id="profileStartUrl" type="text" placeholder="留空则使用内置看板页">
+                                    <span>环境备忘录 Notes</span>
+                                    <textarea id="profileNotes" rows="2" placeholder="输入相关账号、用途和其它备忘记录"></textarea>
                                 </label>
                             </div>
 
-                            <div class="grid two">
-                                <label>
-                                    <span>操作系统预设 Platform</span>
-                                    <select id="profilePlatform">
-                                        <option value="Win32">Windows System</option>
-                                        <option value="MacIntel">macOS System</option>
-                                    </select>
-                                </label>
-                                <label>
-                                    <span>代理节点 Proxy Node</span>
-                                    <select id="profileProxyId"></select>
-                                </label>
-                            </div>
-
-                            <label>
-                                <span>自定义 UA (User-Agent)</span>
-                                <textarea id="profileUserAgent" rows="2" placeholder="填写自定义浏览器头"></textarea>
-                            </label>
-
-                            <div class="grid four">
-                                <label>
-                                    <span>界面语言 Language</span>
-                                    <input id="profileLanguage" type="text" placeholder="留空则跟随代理">
-                                </label>
-                                <label>
-                                    <span>时区 Timezone</span>
-                                    <input id="profileTimezone" type="text" placeholder="留空则跟随代理">
-                                </label>
-                                <label>
-                                    <span>CPU 核心分布</span>
-                                    <input id="profileHardware" type="number" min="2" max="32" placeholder="Auto">
-                                </label>
-                                <label>
-                                    <span>运行内存分配 (GB)</span>
-                                    <input id="profileMemory" type="number" min="2" max="32" placeholder="Auto">
-                                </label>
-                            </div>
-
-                            <div class="grid two">
-                                <label>
-                                    <span>屏幕特征宽度 Width</span>
-                                    <input id="profileWidth" type="number" min="800" placeholder="e.g. 1920">
-                                </label>
-                                <label>
-                                    <span>屏幕特征高度 Height</span>
-                                    <input id="profileHeight" type="number" min="600" placeholder="e.g. 1080">
-                                </label>
-                            </div>
-
-                            <label>
-                                <span>绑定标签 Tags</span>
-                                <input id="profileTags" type="text" placeholder="以逗号分割：shop, dev, test">
-                            </label>
-
-                            <label>
-                                <span>环境备忘录 Notes</span>
-                                <textarea id="profileNotes" rows="2" placeholder="输入相关账号、用途和其它备忘记录"></textarea>
-                            </label>
-
-                            <div class="grid two">
-                                <label>
-                                    <span>Agent 默认超时（毫秒）</span>
-                                    <input id="agentToolTimeoutMs" type="number" min="5000" max="60000" step="1000" placeholder="20000">
-                                </label>
-                                <div class="agent-setting-note">
-                                    用于点击、输入、提取以及默认等待文本的超时时间。慢页面可以适当调大。
+                            <!-- Card 2: Network -->
+                            <div class="form-panel">
+                                <div class="form-section-title">网络与启动 (Network & Startup)</div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>代理节点 Proxy Node</span>
+                                        <select id="profileProxyId"></select>
+                                    </label>
+                                    <label>
+                                        <span>启动网址 Startup URL</span>
+                                        <input id="profileStartUrl" type="text" placeholder="留空则使用内置看板页">
+                                    </label>
+                                </div>
+                                <div class="preset-bar">
+                                    <button type="button" class="small-btn preset-url-btn" data-url="">内置看板页</button>
+                                    <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IPinfo</button>
+                                    <button type="button" class="small-btn preset-url-btn" data-url="https://bot.sannysoft.com/">SannySoft</button>
+                                    <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
+                                    <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
+                                </div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>界面语言 Language</span>
+                                        <input id="profileLanguage" type="text" placeholder="留空则跟随代理">
+                                    </label>
+                                    <label>
+                                        <span>时区 Timezone</span>
+                                        <input id="profileTimezone" type="text" placeholder="留空则跟随代理">
+                                    </label>
                                 </div>
                             </div>
-                            <div class="form-actions">
+
+                            <!-- Card 3: Advanced -->
+                            <div class="form-panel">
+                                <div class="form-section-title">硬件与高级指纹 (Hardware & Advanced)</div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>屏幕特征宽度 Width</span>
+                                        <input id="profileWidth" type="number" min="800" placeholder="e.g. 1920">
+                                    </label>
+                                    <label>
+                                        <span>屏幕特征高度 Height</span>
+                                        <input id="profileHeight" type="number" min="600" placeholder="e.g. 1080">
+                                    </label>
+                                </div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>CPU 核心分布</span>
+                                        <input id="profileHardware" type="number" min="2" max="32" placeholder="Auto">
+                                    </label>
+                                    <label>
+                                        <span>运行内存分配 (GB)</span>
+                                        <input id="profileMemory" type="number" min="2" max="32" placeholder="Auto">
+                                    </label>
+                                </div>
+                                <label>
+                                    <span>自定义 UA (User-Agent)</span>
+                                    <textarea id="profileUserAgent" rows="2" placeholder="填写自定义浏览器头"></textarea>
+                                </label>
+                                <div class="grid two">
+                                    <label>
+                                        <span>Agent 默认超时（毫秒）</span>
+                                        <input id="agentToolTimeoutMs" type="number" min="5000" max="60000" step="1000" placeholder="20000">
+                                    </label>
+                                    <div class="agent-setting-note" style="align-self: flex-end; padding-bottom: 8px;">
+                                        用于点击、输入、提取以及默认等待文本的超时时间。慢页面可以适当调大。
+                                    </div>
+                                </div>
+
+                                <details class="advanced-card" style="margin-top: 12px;">
+                                    <summary>更多高级指纹配置</summary>
+                                    <div class="advanced-card-body">
+                                        <div class="grid four">
+                                            <label>
+                                                <span>WebRTC 模式</span>
+                                                <select id="profileWebrtcMode">
+                                                    <option value="proxy">代理模式</option>
+                                                    <option value="disabled">禁用</option>
+                                                    <option value="real">原样暴露</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                <span>地理位置模式</span>
+                                                <select id="profileGeoMode">
+                                                    <option value="auto">自动跟随代理</option>
+                                                    <option value="manual">手动坐标</option>
+                                                    <option value="block">阻止访问</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                <span>GPU 档位</span>
+                                                <select id="profileGpuTier">
+                                                    <option value="low">低</option>
+                                                    <option value="medium">中</option>
+                                                    <option value="high">高</option>
+                                                </select>
+                                            </label>
+                                            <label>
+                                                <span>Do Not Track</span>
+                                                <select id="profileDoNotTrack">
+                                                    <option value="">关闭</option>
+                                                    <option value="1">发送 1</option>
+                                                </select>
+                                            </label>
+                                        </div>
+
+                                        <div class="grid four">
+                                            <label>
+                                                <span>纬度</span>
+                                                <input id="profileGeoLatitude" type="number" step="0.000001" placeholder="Auto">
+                                            </label>
+                                            <label>
+                                                <span>经度</span>
+                                                <input id="profileGeoLongitude" type="number" step="0.000001" placeholder="Auto">
+                                            </label>
+                                            <label>
+                                                <span>定位精度 (m)</span>
+                                                <input id="profileGeoAccuracy" type="number" min="1" placeholder="30">
+                                            </label>
+                                            <label class="checkbox-row">
+                                                <span>启用 WebGPU</span>
+                                                <input id="profileWebgpuEnabled" type="checkbox" checked>
+                                            </label>
+                                        </div>
+
+                                        <div class="grid two">
+                                            <label>
+                                                <span>字体列表</span>
+                                                <textarea id="profileFonts" rows="3" placeholder="每行或逗号分隔一个字体名"></textarea>
+                                            </label>
+                                            <label>
+                                                <span>语音列表</span>
+                                                <textarea id="profileSpeechVoices" rows="3" placeholder="每行格式：名称|语言|voiceURI"></textarea>
+                                            </label>
+                                        </div>
+
+                                        <div class="grid two">
+                                            <label>
+                                                <span>Client Rects 噪声</span>
+                                                <input id="profileClientRectsNoise" type="number" min="0" max="20" placeholder="Auto">
+                                            </label>
+                                            <label>
+                                                <span>AudioContext 噪声</span>
+                                                <input id="profileAudioContextNoise" type="number" min="0" max="20" placeholder="Auto">
+                                            </label>
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div class="form-actions sticky-actions" style="margin-top: 8px;">
                                 <button type="submit" class="primary-btn">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                                     保存并持久化环境
@@ -230,12 +525,109 @@
                         </form>
                     </div>
 
-                    <div class="hero-aside">
-                        <div class="preview-card create-preview">
-                            <div class="preview-title">预期生成指纹预览 Output</div>
-                            <pre id="fingerprintPreview">Waiting for configuration input...
-</pre>
+                    <!-- RIGHT COLUMN -->
+                    <div class="create-side-col">
+                        
+                        <!-- Preview Card -->
+                        <div class="panel form-panel create-preview-panel">
+                            <div class="form-section-title" style="margin-bottom: 12px; color: var(--accent-hover);">预期生成指纹预览 Output</div>
+                            <pre id="fingerprintPreview" class="fingerprint-preview-box">Waiting for configuration input...</pre>
                         </div>
+
+                        <!-- Template Management -->
+                        <div class="panel form-panel">
+                            <div class="form-section-title">环境模板</div>
+                            <div class="grid one" style="gap: 16px;">
+                                <label>
+                                    <span>已保存模板</span>
+                                    <select id="templateSelect"></select>
+                                </label>
+                                <label>
+                                    <span>模板名称</span>
+                                    <input id="templateName" type="text" placeholder="例如：店铺注册模板">
+                                </label>
+                                <label>
+                                    <span>模板备注</span>
+                                    <textarea id="templateNotes" rows="2" placeholder="记录模板用途、适用站点或默认说明"></textarea>
+                                </label>
+                                <div class="form-actions" style="padding-top: 16px; margin-top: 0; flex-wrap: wrap;">
+                                    <button type="button" id="applyTemplateBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 45%;">从模板创建</button>
+                                    <button type="button" id="saveTemplateBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 45%;">保存为模板</button>
+                                    <button type="button" id="deleteTemplateBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 45%;">删除模板</button>
+                                    <button type="button" id="resetTemplateBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 45%;">新模板</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Project Management -->
+                        <div class="panel form-panel">
+                            <div class="form-section-title">项目管理</div>
+                            <div class="grid one" style="gap: 16px;">
+                                <label>
+                                    <span>当前项目</span>
+                                    <select id="projectEditorId"></select>
+                                </label>
+                                <div class="grid two">
+                                    <label>
+                                        <span>项目名称</span>
+                                        <input id="projectName" type="text" placeholder="例如：TikTok UK">
+                                    </label>
+                                    <label>
+                                        <span>项目颜色</span>
+                                        <input id="projectColor" type="color" value="#0f766e" style="height: 42px; padding: 4px;">
+                                    </label>
+                                </div>
+                                <label>
+                                    <span>项目备注</span>
+                                    <textarea id="projectNotes" rows="2" placeholder="记录该项目的人群、站点或使用目标"></textarea>
+                                </label>
+                                <div class="form-actions" style="padding-top: 16px; margin-top: 0; flex-wrap: wrap;">
+                                    <button type="button" id="saveProjectBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 30%;">保存项目</button>
+                                    <button type="button" id="deleteProjectBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 30%;">删除项目</button>
+                                    <button type="button" id="resetProjectBtn" class="ghost-btn small-btn" style="flex: 1; min-width: 30%;">新项目</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Batch Create -->
+                        <div class="panel form-panel">
+                            <div class="form-section-title">批量创建</div>
+                            <div class="grid one" style="gap: 16px;">
+                                <div class="grid two">
+                                    <label>
+                                        <span>创建数量</span>
+                                        <input id="batchCreateCount" type="number" min="2" max="50" value="10">
+                                    </label>
+                                    <label>
+                                        <span>名称前缀</span>
+                                        <input id="batchCreatePrefix" type="text" placeholder="例如：Shop-US">
+                                    </label>
+                                </div>
+                                <label>
+                                    <span>代理分配</span>
+                                    <select id="batchCreateProxyMode">
+                                        <option value="current">沿用当前代理</option>
+                                        <option value="direct">全部直连</option>
+                                        <option value="round-robin">按代理列表轮询</option>
+                                    </select>
+                                </label>
+                                <div class="agent-setting-note">
+                                    会自动追加序号。并复用当前表单备注、标签和网络草稿。
+                                </div>
+                                <label class="checkbox-row" style="justify-content: flex-start; gap: 8px;">
+                                    <input id="batchCreateInheritTags" type="checkbox" checked>
+                                    <span style="font-size: 13px;">继承当前标签</span>
+                                </label>
+                                <label class="checkbox-row" style="justify-content: flex-start; gap: 8px;">
+                                    <input id="batchCreateRandomizeFingerprint" type="checkbox" checked>
+                                    <span style="font-size: 13px;">每个环境随机指纹</span>
+                                </label>
+                                <div class="form-actions" style="padding-top: 16px; margin-top: 0;">
+                                    <button type="button" id="batchCreateBtn" class="primary-btn" style="width: 100%; justify-content: center;">批量创建环境</button>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </section>
@@ -301,6 +693,34 @@
                             <div class="panel-kicker">全部资产</div>
                             <h2>可用代理清单</h2>
                         </div>
+                        <div class="panel-actions">
+                            <button id="refreshProxyGeoBtn" class="ghost-btn">刷新地区信息</button>
+                            <button id="allocateProxyBtn" class="primary-btn">自动分配到已选环境</button>
+                        </div>
+                    </div>
+                    <div class="list-toolbar">
+                        <div class="search-wrap">
+                            <select id="proxyCountryFilter"></select>
+                        </div>
+                        <div class="search-wrap">
+                            <select id="proxyCityFilter"></select>
+                        </div>
+                        <div class="search-wrap">
+                            <select id="proxyLatencyFilter">
+                                <option value="">全部延迟</option>
+                                <option value="200">200ms 内</option>
+                                <option value="500">500ms 内</option>
+                                <option value="1000">1000ms 内</option>
+                            </select>
+                        </div>
+                        <div class="search-wrap">
+                            <select id="proxyAllocationMode">
+                                <option value="manual">手动</option>
+                                <option value="round-robin">轮询分配</option>
+                                <option value="sticky">稳定映射</option>
+                                <option value="geo-match">地区匹配</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="table-wrap">
                         <table>
@@ -309,8 +729,10 @@
                                     <th>节点别名</th>
                                     <th>协议类型</th>
                                     <th>来源归属</th>
+                                    <th>地区 / 提供方</th>
+                                    <th>状态</th>
                                     <th>联通延迟</th>
-                                    <th>最后更新时刻</th>
+                                    <th>最近检测</th>
                                     <th style="text-align: right;">节点操作</th>
                                 </tr>
                             </thead>
@@ -446,6 +868,72 @@
                     </div>
                     <div id="agentFormatDocs" class="agent-format-docs">
                         <div class="sub-item">支持 OpenAI、OpenAI Responses、Anthropic、Gemini 四种协议格式；每个供应商都可单独保存并用于 Agent 执行，模型列表可自动抓取，也可手动补录模型 ID。</div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-sync" class="view">
+                <div class="proxy-layout">
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">主从窗口同步</div>
+                                <h2>实时复制主窗口操作</h2>
+                            </div>
+                            <div class="panel-actions">
+                                <button id="startSyncBtn" class="primary-btn">启动同步</button>
+                                <button id="stopSyncBtn" class="ghost-btn">停止同步</button>
+                            </div>
+                        </div>
+
+                        <div class="stack-form">
+                            <div class="grid two">
+                                <label>
+                                    <span>主窗口</span>
+                                    <select id="syncMasterProfileId"></select>
+                                </label>
+                                <label>
+                                    <span>同步事件</span>
+                                    <div id="syncEventTypeList" class="sub-actions"></div>
+                                </label>
+                            </div>
+
+                            <div class="sub-list-wrap">
+                                <div class="sub-list-title">从窗口</div>
+                                <div id="syncSlaveProfileList" class="sub-actions"></div>
+                            </div>
+
+                            <div class="sub-list-wrap">
+                                <div class="sub-list-title">运行状态</div>
+                                <div id="syncRuntimeCard" class="agent-runtime-card"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <div class="panel-kicker">结果面板</div>
+                                <h2>从窗口成功率与错误</h2>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>从窗口</th>
+                                        <th>成功</th>
+                                        <th>失败</th>
+                                        <th>最近状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="syncSlaveTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="sub-list-wrap">
+                            <div class="sub-list-title">最近事件</div>
+                            <div id="syncEventLog" class="sub-list"></div>
+                        </div>
                     </div>
                 </div>
             </section>

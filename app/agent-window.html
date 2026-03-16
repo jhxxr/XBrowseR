@@ -42,8 +42,25 @@
                 <div id="batchModeSection" class="mode-section">
                     <label>
                         <span>批量任务说明</span>
-                        <textarea id="agentBatchPrompt" rows="4" placeholder="例如：依次打开每个已选窗口，检查登录状态，并汇总结果。"></textarea>
+                        <textarea id="agentBatchPrompt" rows="4" placeholder="例如：依次打开每个已选窗口，检查登录状态，并汇总结论。"></textarea>
                     </label>
+                    <div class="inline-fields">
+                        <label>
+                            <span>并发数</span>
+                            <input id="agentBatchConcurrency" type="number" min="1" max="5" value="1">
+                        </label>
+                        <label>
+                            <span>失败重试</span>
+                            <input id="agentBatchMaxRetries" type="number" min="0" max="3" value="0">
+                        </label>
+                        <label>
+                            <span>失败策略</span>
+                            <select id="agentBatchFailureStrategy">
+                                <option value="skip">跳过继续</option>
+                                <option value="stop">立即停止</option>
+                            </select>
+                        </label>
+                    </div>
                     <div class="profile-picker-head">
                         <span>选择窗口</span>
                         <div class="profile-picker-actions">
@@ -78,6 +95,7 @@
                         <h2 id="boardTitle">任务卡片</h2>
                     </div>
                     <div class="toolbar">
+                        <button id="exportBatchBtn" type="button" class="secondary-btn">导出结果</button>
                         <button id="stopAgentBtn" type="button" class="secondary-btn">停止当前执行</button>
                         <button id="closeAgentSessionBtn" type="button" class="danger-btn">清空当前批量任务</button>
                     </div>
@@ -90,7 +108,7 @@
                 <div id="singleBoard" class="single-board hidden">
                     <div id="singleTaskCard" class="task-card single-card"></div>
                     <form id="agentComposerForm" class="composer">
-                        <textarea id="agentComposerInput" rows="4" placeholder="继续告诉 Agent 这个窗口接下来要做什么"></textarea>
+                        <textarea id="agentComposerInput" rows="4" placeholder="继续告诉 Agent 这个窗口接下来要做什么？"></textarea>
                         <button id="sendAgentMessageBtn" type="submit" class="primary-btn">发送</button>
                     </form>
                 </div>
@@ -120,7 +138,8 @@
                     </div>
                 </div>
 
-                <div id="detailSummary" class="detail-summary">选择任务卡片后，可在这里查看步骤、摘要和错误信息。</div>
+                <div id="detailSummary" class="detail-summary">选择任务卡片后，可以在这里查看步骤、摘要和错误信息。</div>
+                <div id="detailSteps" class="detail-steps"></div>
                 <div id="detailEventList" class="detail-event-list"></div>
             </aside>
         </div>

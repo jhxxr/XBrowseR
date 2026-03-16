@@ -20,7 +20,12 @@ function createEmptyAgentRuntimeState() {
             providerFormat: '',
             model: '',
             prompt: '',
+            concurrency: 1,
+            maxRetries: 0,
+            failureStrategy: 'skip',
             currentTaskId: '',
+            exportFilePath: '',
+            exportedAt: 0,
             counts: {
                 total: 0,
                 queued: 0,
@@ -60,6 +65,9 @@ const agentLaunchModelSelect = document.getElementById('agentLaunchModel');
 const agentLaunchProfileSelect = document.getElementById('agentLaunchProfile');
 const agentLaunchMessageInput = document.getElementById('agentLaunchMessage');
 const agentBatchPromptInput = document.getElementById('agentBatchPrompt');
+const agentBatchConcurrencyInput = document.getElementById('agentBatchConcurrency');
+const agentBatchMaxRetriesInput = document.getElementById('agentBatchMaxRetries');
+const agentBatchFailureStrategySelect = document.getElementById('agentBatchFailureStrategy');
 const batchModeSection = document.getElementById('batchModeSection');
 const singleModeSection = document.getElementById('singleModeSection');
 const batchProfileGrid = document.getElementById('batchProfileGrid');
@@ -72,6 +80,7 @@ const boardTitle = document.getElementById('boardTitle');
 const boardMeta = document.getElementById('boardMeta');
 const batchOverview = document.getElementById('batchOverview');
 const batchBoard = document.getElementById('batchBoard');
+const exportBatchBtn = document.getElementById('exportBatchBtn');
 const singleBoard = document.getElementById('singleBoard');
 const singleTaskCard = document.getElementById('singleTaskCard');
 const agentComposerForm = document.getElementById('agentComposerForm');
@@ -85,6 +94,7 @@ const agentCurrentModelEl = document.getElementById('agentCurrentModel');
 const agentCurrentProfileEl = document.getElementById('agentCurrentProfile');
 const agentCurrentPageEl = document.getElementById('agentCurrentPage');
 const detailSummary = document.getElementById('detailSummary');
+const detailSteps = document.getElementById('detailSteps');
 const detailEventList = document.getElementById('detailEventList');
 
 function escapeHtml(value) {
@@ -107,6 +117,14 @@ function formatDuration(ms) {
     if (value < 1000) return `${value}ms`;
     if (value < 60000) return `${(value / 1000).toFixed(1)}s`;
     return `${(value / 60000).toFixed(1)}m`;
+}
+
+function trimPreview(value, maxLength = 96) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLength) {
+        return text;
+    }
+    return `${text.slice(0, Math.max(12, maxLength - 1))}…`;
 }
 
 function showToast(message) {
@@ -153,6 +171,14 @@ function syncAgentModeFromRuntime() {
 
 function getBatchState() {
     return getAgentRuntime().batch || createEmptyAgentRuntimeState().batch;
+}
+
+function getBatchLaunchOptions(batch = getBatchState()) {
+    return {
+        concurrency: Math.max(1, Math.min(5, Number(agentBatchConcurrencyInput?.value) || Number(batch.concurrency) || 1)),
+        maxRetries: Math.max(0, Math.min(3, Number(agentBatchMaxRetriesInput?.value) || Number(batch.maxRetries) || 0)),
+        failureStrategy: (agentBatchFailureStrategySelect?.value || batch.failureStrategy || 'skip') === 'stop' ? 'stop' : 'skip'
+    };
 }
 
 function getBatchCounts(batch = getBatchState()) {
@@ -323,6 +349,59 @@ function getDetailPayload() {
     };
 }
 
+function getEventTone(entry) {
+    if (entry.kind === 'message' && entry.role === 'user') return 'user';
+    if (entry.kind === 'message' && entry.role === 'assistant') return 'assistant';
+    if (entry.kind === 'tool') return 'tool';
+    if (entry.level === 'error') return 'error';
+    if (entry.level === 'warn') return 'warn';
+    return 'info';
+}
+
+function getEventLabel(entry) {
+    if (entry.kind === 'message' && entry.role === 'user') return '用户输入';
+    if (entry.kind === 'message' && entry.role === 'assistant') return 'Agent 回复';
+    if (entry.kind === 'tool') return '工具调用';
+    return entry.level === 'error'
+        ? '错误状态'
+        : (entry.level === 'warn' ? '提醒状态' : '运行状态');
+}
+
+function getEventBody(entry) {
+    if (entry.kind === 'message') {
+        return entry.content || '';
+    }
+    return entry.message || '';
+}
+
+function buildDetailStepState(events = []) {
+    const recent = events.slice(-6);
+    const counts = events.reduce((summary, entry) => {
+        if (entry.kind === 'message' && entry.role === 'user') summary.user += 1;
+        if (entry.kind === 'message' && entry.role === 'assistant') summary.assistant += 1;
+        if (entry.kind === 'tool') summary.tool += 1;
+        if (entry.kind === 'status') summary.status += 1;
+        return summary;
+    }, {
+        user: 0,
+        assistant: 0,
+        tool: 0,
+        status: 0
+    });
+
+    return {
+        counts,
+        recent: recent.map((entry, index) => ({
+            id: entry.id || `${entry.createdAt || 0}-${index}`,
+            step: Math.max(1, events.length - recent.length + index + 1),
+            tone: getEventTone(entry),
+            label: getEventLabel(entry),
+            meta: formatDate(entry.createdAt),
+            body: trimPreview(getEventBody(entry), 140)
+        }))
+    };
+}
+
 function renderMode() {
     const runtimeAgent = getAgentRuntime();
     const batch = getBatchState();
@@ -347,10 +426,11 @@ function renderMode() {
     closeAgentSessionBtn.textContent = isBatch ? '清空当前批量任务' : '结束当前会话';
 }
 
-function renderLaunchOptions() {
+function renderLaunchOptionsLegacy() {
     const runtimeAgent = getAgentRuntime();
     const batch = getBatchState();
     const busy = runtimeAgent.running || batch.running;
+    const batchOptions = getBatchLaunchOptions(batch);
     const modelChoices = getAgentModelChoices();
     const selectedModel = modelChoices.some((item) => item.value === agentLaunchModelSelect.value)
         ? agentLaunchModelSelect.value
@@ -359,6 +439,9 @@ function renderLaunchOptions() {
     if (!modelChoices.length) {
         agentLaunchModelSelect.innerHTML = '<option value="">暂无可用模型</option>';
         agentLaunchModelSelect.value = '';
+        if (batch.tasks.length) {
+            boardMeta.textContent += ` / 并发 ${batch.concurrency || 1} / 重试 ${batch.maxRetries || 0} / 策略 ${(batch.failureStrategy || 'skip') === 'stop' ? '失败即停' : '跳过继续'}`;
+        }
     } else {
         agentLaunchModelSelect.innerHTML = modelChoices.map((choice) => `
             <option value="${choice.value}">${escapeHtml(choice.label)}</option>
@@ -382,6 +465,13 @@ function renderLaunchOptions() {
         agentLaunchProfileSelect.value = selectedProfile;
     }
 
+    agentBatchConcurrencyInput.value = String(batchOptions.concurrency);
+    agentBatchMaxRetriesInput.value = String(batchOptions.maxRetries);
+    agentBatchFailureStrategySelect.value = batchOptions.failureStrategy;
+    agentBatchConcurrencyInput.disabled = busy;
+    agentBatchMaxRetriesInput.disabled = busy;
+    agentBatchFailureStrategySelect.disabled = busy;
+
     batchProfileGrid.innerHTML = appState.profiles.length
         ? appState.profiles.map((profile) => {
             const checked = selectedBatchProfileIds.has(profile.id) ? 'checked' : '';
@@ -403,9 +493,10 @@ function renderLaunchOptions() {
 
     startBatchBtn.disabled = busy || !modelChoices.length || !appState.profiles.length;
     startSingleSessionBtn.disabled = busy || !modelChoices.length || !appState.profiles.length;
+    exportBatchBtn.disabled = batch.running || !(batch.tasks || []).length;
 }
 
-function renderStatus() {
+function renderStatusLegacy() {
     const runtimeAgent = getAgentRuntime();
     const batch = getBatchState();
 
@@ -473,7 +564,7 @@ function renderBatchOverview() {
     `;
 }
 
-function renderBatchBoard() {
+function renderBatchBoardLegacy() {
     const batch = getBatchState();
     if (!batch.tasks.length) {
         batchBoard.innerHTML = '<div class="detail-summary">填写批量任务说明，选择多个窗口后启动。每个窗口都会生成独立任务卡片。</div>';
@@ -499,16 +590,182 @@ function renderBatchBoard() {
     `).join('');
 }
 
+function renderLaunchOptions() {
+    const runtimeAgent = getAgentRuntime();
+    const batch = getBatchState();
+    const busy = runtimeAgent.running || batch.running;
+    const batchOptions = getBatchLaunchOptions(batch);
+    const modelChoices = getAgentModelChoices();
+    const selectedModel = modelChoices.some((item) => item.value === agentLaunchModelSelect.value)
+        ? agentLaunchModelSelect.value
+        : (batch.providerId || runtimeAgent.providerId || getActiveProvider()?.id || modelChoices[0]?.value || '');
+
+    if (!modelChoices.length) {
+        agentLaunchModelSelect.innerHTML = '<option value="">暂无可用模型</option>';
+        agentLaunchModelSelect.value = '';
+    } else {
+        agentLaunchModelSelect.innerHTML = modelChoices.map((choice) => `
+            <option value="${choice.value}">${escapeHtml(choice.label)}</option>
+        `).join('');
+        agentLaunchModelSelect.value = selectedModel;
+    }
+
+    const selectedProfile = appState.profiles.some((item) => item.id === agentLaunchProfileSelect.value)
+        ? agentLaunchProfileSelect.value
+        : (runtimeAgent.profileId || appState.profiles[0]?.id || '');
+
+    if (!appState.profiles.length) {
+        agentLaunchProfileSelect.innerHTML = '<option value="">暂无环境</option>';
+        agentLaunchProfileSelect.value = '';
+    } else {
+        agentLaunchProfileSelect.innerHTML = appState.profiles.map((profile) => {
+            const runtime = getRunning(profile.id);
+            const suffix = runtime ? ' / 运行中' : ' / 将自动启动';
+            return `<option value="${profile.id}">${escapeHtml(profile.name)}${suffix}</option>`;
+        }).join('');
+        agentLaunchProfileSelect.value = selectedProfile;
+    }
+
+    agentBatchConcurrencyInput.value = String(batchOptions.concurrency);
+    agentBatchMaxRetriesInput.value = String(batchOptions.maxRetries);
+    agentBatchFailureStrategySelect.value = batchOptions.failureStrategy;
+    agentBatchConcurrencyInput.disabled = busy;
+    agentBatchMaxRetriesInput.disabled = busy;
+    agentBatchFailureStrategySelect.disabled = busy;
+
+    batchProfileGrid.innerHTML = appState.profiles.length
+        ? appState.profiles.map((profile) => {
+            const checked = selectedBatchProfileIds.has(profile.id) ? 'checked' : '';
+            const runtime = getRunning(profile.id);
+            return `
+                <label class="profile-option">
+                    <div class="profile-option-head">
+                        <div class="profile-option-title">${escapeHtml(profile.name)}</div>
+                        <input type="checkbox" data-profile-id="${profile.id}" ${checked}>
+                    </div>
+                    <div class="profile-option-meta">
+                        ${runtime ? '窗口已在运行，可直接接管' : '窗口未启动，Agent 会自动拉起'}<br>
+                        ${escapeHtml(profile.startUrl || '使用默认起始页')}
+                    </div>
+                </label>
+            `;
+        }).join('')
+        : '<div class="detail-summary">还没有浏览器环境，请先在主界面创建环境。</div>';
+
+    startBatchBtn.disabled = busy || !modelChoices.length || !appState.profiles.length;
+    startSingleSessionBtn.disabled = busy || !modelChoices.length || !appState.profiles.length;
+    exportBatchBtn.disabled = batch.running || !(batch.tasks || []).length;
+}
+
+function renderStatus() {
+    const runtimeAgent = getAgentRuntime();
+    const batch = getBatchState();
+
+    if (batch.running) {
+        agentStatusBadge.textContent = batch.stopRequested ? '正在停止批量任务' : '批量任务执行中';
+    } else if (batch.tasks.length) {
+        agentStatusBadge.textContent = '批量任务待清空';
+    } else if (runtimeAgent.running) {
+        agentStatusBadge.textContent = '单窗口执行中';
+    } else if (runtimeAgent.sessionId) {
+        agentStatusBadge.textContent = '单窗口会话待命';
+    } else {
+        agentStatusBadge.textContent = '空闲';
+    }
+
+    if (agentMode === 'batch') {
+        const counts = getBatchCounts(batch);
+        const tuningSummary = `并发 ${batch.concurrency || 1} / 重试 ${batch.maxRetries || 0} / 策略 ${(batch.failureStrategy || 'skip') === 'stop' ? '失败即停' : '跳过继续'}`;
+        boardMeta.textContent = batch.tasks.length
+            ? `总数 ${counts.total} / 执行中 ${counts.running} / 成功 ${counts.success} / 失败 ${counts.error} / 已停止 ${counts.stopped} / ${tuningSummary}`
+            : '用于多窗口任务编排';
+    } else {
+        boardMeta.textContent = runtimeAgent.sessionId
+            ? '面向单个受控窗口的持续会话模式'
+            : '高级模式，聚焦接管单一窗口';
+    }
+
+    stopAgentBtn.disabled = !runtimeAgent.running && !batch.running;
+    closeAgentSessionBtn.disabled = !canClearAgentState(runtimeAgent, batch);
+    sendAgentMessageBtn.disabled = agentMode !== 'single' || !runtimeAgent.sessionId || runtimeAgent.running || batch.running;
+    agentComposerInput.disabled = sendAgentMessageBtn.disabled;
+    agentComposerInput.placeholder = sendAgentMessageBtn.disabled
+        ? '请先启动单窗口会话，或等待当前执行完成'
+        : '继续告诉 Agent 这个窗口接下来要做什么';
+}
+
+function renderBatchBoard() {
+    const batch = getBatchState();
+    if (!batch.tasks.length) {
+        batchBoard.innerHTML = '<div class="detail-summary">填写批量任务说明，选择多个窗口后启动。每个窗口都会生成独立任务卡片。</div>';
+        return;
+    }
+
+    batchBoard.innerHTML = batch.tasks.map((task, index) => `
+        <article class="task-card ${task.id === selectedTaskId ? 'active' : ''}" data-task-id="${task.id}">
+            <div class="task-card-head">
+                <div class="task-card-title">
+                    <strong>任务 ${index + 1} / ${escapeHtml(task.profileName)}</strong>
+                    <div class="task-card-subtitle">${escapeHtml(task.pageUrl || '等待执行')}</div>
+                </div>
+                <span class="task-status ${escapeHtml(task.status)}">${escapeHtml(getTaskStatusLabel(task.status))}</span>
+            </div>
+            <div class="task-summary">${escapeHtml(task.summary || task.lastMessage || '等待模型规划')}</div>
+            <div class="task-meta-row">
+                <span class="task-chip">耗时 ${escapeHtml(formatDuration(task.durationMs))}</span>
+                <span class="task-chip">事件 ${escapeHtml(String(task.events.length))}</span>
+                <span class="task-chip">尝试 ${escapeHtml(String(task.attemptCount || 0))}</span>
+                <span class="task-chip">${escapeHtml(task.error ? '含错误' : '可查看详情')}</span>
+            </div>
+        </article>
+    `).join('');
+}
+
 function renderDetail() {
     const detail = getDetailPayload();
+    const stepState = buildDetailStepState(detail.events);
     detailTitle.textContent = detail.title;
     detailBadge.textContent = detail.badge;
     agentCurrentModelEl.textContent = detail.model;
     agentCurrentProfileEl.textContent = detail.profile;
     agentCurrentPageEl.textContent = detail.page;
     detailSummary.textContent = detail.summary;
+    detailSteps.innerHTML = detail.events.length
+        ? `
+            <div class="detail-step-summary">
+                <div class="detail-step-card">
+                    <div class="detail-step-card-label">总步骤</div>
+                    <div class="detail-step-card-value">${escapeHtml(String(detail.events.length))}</div>
+                </div>
+                <div class="detail-step-card">
+                    <div class="detail-step-card-label">用户输入</div>
+                    <div class="detail-step-card-value">${escapeHtml(String(stepState.counts.user))}</div>
+                </div>
+                <div class="detail-step-card">
+                    <div class="detail-step-card-label">工具调用</div>
+                    <div class="detail-step-card-value">${escapeHtml(String(stepState.counts.tool))}</div>
+                </div>
+                <div class="detail-step-card">
+                    <div class="detail-step-card-label">Agent 回复</div>
+                    <div class="detail-step-card-value">${escapeHtml(String(stepState.counts.assistant))}</div>
+                </div>
+            </div>
+            <div class="detail-step-list">
+                ${stepState.recent.map((item) => `
+                    <article class="detail-step-item ${escapeHtml(item.tone)}">
+                        <div class="detail-step-head">
+                            <div class="detail-step-title">步骤 ${escapeHtml(String(item.step))} · ${escapeHtml(item.label)}</div>
+                            <div class="detail-step-meta">${escapeHtml(item.meta)}</div>
+                        </div>
+                        <div class="detail-step-body">${escapeHtml(item.body || '-')}</div>
+                    </article>
+                `).join('')}
+            </div>
+        `
+        : '<div class="detail-summary">当前还没有步骤记录。启动任务后，这里会先显示最近步骤，再显示完整事件流。</div>';
 
     if (!detail.events.length) {
+        detailSteps.innerHTML = '<div class="detail-summary">当前还没有步骤记录。启动任务后，这里会先显示最近步骤，再显示完整事件流。</div>';
         detailEventList.innerHTML = '<div class="detail-summary">任务步骤、工具调用和状态变化会显示在这里。</div>';
         return;
     }
@@ -604,6 +861,14 @@ batchBoard.addEventListener('click', (event) => {
     renderAll();
 });
 
+interceptUiEvent(exportBatchBtn, 'click', async () => {
+    const result = await window.xbrowser.exportAgentBatchResults();
+    if (result?.canceled) {
+        return;
+    }
+    showToast(result?.filePath ? `批量结果已导出：${result.filePath}` : '批量结果已导出。');
+});
+
 function interceptUiEvent(element, eventName, handler) {
     element.addEventListener(eventName, (event) => {
         event.preventDefault();
@@ -616,6 +881,7 @@ interceptUiEvent(startBatchBtn, 'click', async () => {
     const providerId = agentLaunchModelSelect.value;
     const prompt = agentBatchPromptInput.value.trim();
     const profileIds = Array.from(selectedBatchProfileIds);
+    const batchOptions = getBatchLaunchOptions();
 
     if (!providerId) {
         showToast('请先选择模型。');
@@ -633,7 +899,10 @@ interceptUiEvent(startBatchBtn, 'click', async () => {
     await window.xbrowser.startAgentBatch({
         providerId,
         profileIds,
-        prompt
+        prompt,
+        concurrency: batchOptions.concurrency,
+        maxRetries: batchOptions.maxRetries,
+        failureStrategy: batchOptions.failureStrategy
     });
     agentMode = 'batch';
     showToast('批量任务已启动。');

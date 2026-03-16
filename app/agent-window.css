@@ -156,6 +156,12 @@ p {
     gap: 14px;
 }
 
+.inline-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
 .hidden {
     display: none !important;
 }
@@ -499,6 +505,110 @@ button:disabled {
     font-size: 13px;
 }
 
+.detail-steps {
+    display: grid;
+    gap: 10px;
+}
+
+.detail-step-summary,
+.detail-step-list {
+    display: grid;
+    gap: 10px;
+}
+
+.detail-step-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.detail-step-card,
+.detail-step-item {
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.detail-step-card {
+    display: grid;
+    gap: 6px;
+}
+
+.detail-step-card-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.detail-step-card-value {
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.detail-step-list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.detail-step-item {
+    display: grid;
+    gap: 8px;
+}
+
+.detail-step-item.info {
+    border-color: rgba(79, 140, 255, 0.18);
+}
+
+.detail-step-item.tool {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.detail-step-item.assistant {
+    border-color: rgba(45, 195, 143, 0.22);
+    background: rgba(45, 195, 143, 0.08);
+}
+
+.detail-step-item.user {
+    border-color: rgba(79, 140, 255, 0.22);
+    background: rgba(79, 140, 255, 0.08);
+}
+
+.detail-step-item.warn {
+    border-color: rgba(244, 176, 79, 0.22);
+    background: rgba(244, 176, 79, 0.08);
+}
+
+.detail-step-item.error {
+    border-color: rgba(234, 103, 103, 0.22);
+    background: rgba(234, 103, 103, 0.08);
+}
+
+.detail-step-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.detail-step-title {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.detail-step-meta {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.detail-step-body {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .detail-event-list {
     display: grid;
     gap: 10px;
@@ -607,7 +717,9 @@ button:disabled {
     }
 
     .profile-grid,
+    .inline-fields,
     .summary-grid,
+    .detail-step-summary,
     .overview-grid {
         grid-template-columns: 1fr;
     }

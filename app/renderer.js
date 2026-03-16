@@ -20,7 +20,12 @@ function createEmptyAgentRuntimeState() {
             providerFormat: '',
             model: '',
             prompt: '',
+            concurrency: 1,
+            maxRetries: 0,
+            failureStrategy: 'skip',
             currentTaskId: '',
+            exportFilePath: '',
+            exportedAt: 0,
             counts: {
                 total: 0,
                 queued: 0,
@@ -35,31 +40,105 @@ function createEmptyAgentRuntimeState() {
     };
 }
 
+function createEmptySyncRuntimeState() {
+    return {
+        id: '',
+        masterProfileId: '',
+        slaveProfileIds: [],
+        eventTypes: ['navigation', 'click', 'input'],
+        running: false,
+        startedAt: null,
+        lastEvent: null,
+        counts: {
+            total: 0,
+            success: 0,
+            error: 0
+        },
+        slaves: [],
+        events: []
+    };
+}
+
 let appState = {
     profiles: [],
+    templates: [],
+    accounts: [],
     settings: {
+        projects: [],
         proxies: [],
         subscriptions: [],
         api: { enabled: true, port: 23919 },
         agent: { providers: [], activeProviderId: '', toolTimeoutMs: 20000 },
-        ui: { activeView: 'home' }
+        ui: { activeView: 'home', homeProjectId: 'all' }
     },
     runtime: {
         running: [],
         providerFormats: [],
-        agent: createEmptyAgentRuntimeState()
+        agent: createEmptyAgentRuntimeState(),
+        sync: createEmptySyncRuntimeState()
     }
 };
 
 const toastEl = document.getElementById('toast');
 const navButtons = Array.from(document.querySelectorAll('.nav-btn'));
-const viewIds = ['home', 'create', 'proxies', 'api'];
+const viewIds = ['home', 'create', 'proxies', 'extensions', 'accounts', 'trash', 'api', 'sync'];
 const homeSearchInput = document.getElementById('homeSearchInput');
+const homeProjectFilterSelect = document.getElementById('homeProjectFilter');
+const batchProxyIdSelect = document.getElementById('batchProxyId');
+const batchBindProxyBtn = document.getElementById('batchBindProxyBtn');
+const batchMoveProjectIdSelect = document.getElementById('batchMoveProjectId');
+const batchMoveBtn = document.getElementById('batchMoveBtn');
+const clearProfileSelectionBtn = document.getElementById('clearProfileSelectionBtn');
+const selectAllProfilesInput = document.getElementById('selectAllProfiles');
 const profileForm = document.getElementById('profileForm');
 const profileTableBody = document.getElementById('profileTableBody');
+const trashTableBody = document.getElementById('trashTableBody');
 const proxyTableBody = document.getElementById('proxyTableBody');
+const proxyCountryFilterSelect = document.getElementById('proxyCountryFilter');
+const proxyCityFilterSelect = document.getElementById('proxyCityFilter');
+const proxyLatencyFilterSelect = document.getElementById('proxyLatencyFilter');
+const proxyAllocationModeSelect = document.getElementById('proxyAllocationMode');
+const refreshProxyGeoBtn = document.getElementById('refreshProxyGeoBtn');
+const allocateProxyBtn = document.getElementById('allocateProxyBtn');
+const extensionTableBody = document.getElementById('extensionTableBody');
 const subscriptionList = document.getElementById('subscriptionList');
 const fingerprintPreview = document.getElementById('fingerprintPreview');
+const templateSelect = document.getElementById('templateSelect');
+const templateNameInput = document.getElementById('templateName');
+const templateNotesInput = document.getElementById('templateNotes');
+const applyTemplateBtn = document.getElementById('applyTemplateBtn');
+const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+const deleteTemplateBtn = document.getElementById('deleteTemplateBtn');
+const resetTemplateBtn = document.getElementById('resetTemplateBtn');
+const batchCreateCountInput = document.getElementById('batchCreateCount');
+const batchCreatePrefixInput = document.getElementById('batchCreatePrefix');
+const batchCreateProxyModeSelect = document.getElementById('batchCreateProxyMode');
+const batchCreateInheritTagsInput = document.getElementById('batchCreateInheritTags');
+const batchCreateRandomizeFingerprintInput = document.getElementById('batchCreateRandomizeFingerprint');
+const batchCreateBtn = document.getElementById('batchCreateBtn');
+const profileProjectIdSelect = document.getElementById('profileProjectId');
+const projectEditorIdSelect = document.getElementById('projectEditorId');
+const projectNameInput = document.getElementById('projectName');
+const projectColorInput = document.getElementById('projectColor');
+const projectNotesInput = document.getElementById('projectNotes');
+const saveProjectBtn = document.getElementById('saveProjectBtn');
+const deleteProjectBtn = document.getElementById('deleteProjectBtn');
+const resetProjectBtn = document.getElementById('resetProjectBtn');
+const profileExtensionList = document.getElementById('profileExtensionList');
+const importExtensionBtn = document.getElementById('importExtensionBtn');
+const importCrxExtensionBtn = document.getElementById('importCrxExtensionBtn');
+const accountForm = document.getElementById('accountForm');
+const accountTableBody = document.getElementById('accountTableBody');
+const accountProfileIdSelect = document.getElementById('accountProfileId');
+const resetAccountBtn = document.getElementById('resetAccountBtn');
+const syncMasterProfileIdSelect = document.getElementById('syncMasterProfileId');
+const syncEventTypeList = document.getElementById('syncEventTypeList');
+const syncSlaveProfileList = document.getElementById('syncSlaveProfileList');
+const syncRuntimeCard = document.getElementById('syncRuntimeCard');
+const syncSlaveTableBody = document.getElementById('syncSlaveTableBody');
+const syncEventLog = document.getElementById('syncEventLog');
+const startSyncBtn = document.getElementById('startSyncBtn');
+const stopSyncBtn = document.getElementById('stopSyncBtn');
 
 const agentProviderForm = document.getElementById('agentProviderForm');
 const agentProviderList = document.getElementById('agentProviderList');
@@ -72,9 +151,14 @@ const agentFormatDocs = document.getElementById('agentFormatDocs');
 const agentToolTimeoutInput = document.getElementById('agentToolTimeoutMs');
 
 let homeFilter = 'all';
+let homeProjectId = 'all';
 let homeSearch = '';
 let currentFingerprintDraft = {};
 let agentDraftModels = [];
+const selectedProfileIds = new Set();
+let proxyCountryFilter = '';
+let proxyCityFilter = '';
+let proxyLatencyFilter = '';
 
 const launchProgressByProfileId = new Map();
 const launchCleanupTimers = new Map();
@@ -145,6 +229,39 @@ function getRunning(profileId) {
     return appState.runtime.running.find((item) => item.id === profileId);
 }
 
+function getTemplates() {
+    return appState.templates || [];
+}
+
+function getTemplateById(templateId) {
+    return getTemplates().find((item) => item.id === templateId) || null;
+}
+
+function getProjects() {
+    return appState.settings.projects || [];
+}
+
+function getProjectById(projectId) {
+    if (!projectId) return null;
+    return getProjects().find((item) => item.id === projectId) || null;
+}
+
+function getAccounts() {
+    return appState.accounts || [];
+}
+
+function getActiveProfiles() {
+    return appState.profiles.filter((profile) => !profile.deletedAt);
+}
+
+function getAccountsByProfileId(profileId) {
+    return getAccounts().filter((account) => account.profileId === profileId);
+}
+
+function getExtensions() {
+    return appState.settings.extensions || [];
+}
+
 function getProviderFormats() {
     return appState.runtime.providerFormats || [];
 }
@@ -160,6 +277,10 @@ function getActiveProvider() {
 
 function getAgentToolTimeoutMs() {
     return Math.max(5000, Math.min(60000, Number(appState.settings.agent?.toolTimeoutMs) || 20000));
+}
+
+function getSyncState() {
+    return appState.runtime?.sync || createEmptySyncRuntimeState();
 }
 
 function getProviderFormatMeta(format) {
@@ -199,6 +320,44 @@ function scheduleLaunchProgressCleanup(profileId, delayMs) {
     launchCleanupTimers.set(profileId, timer);
 }
 
+function mountAgentSettingsFieldsLegacy() {
+    const timeoutFieldWrap = agentToolTimeoutInput?.closest('.grid.two');
+    const providerPanel = agentProviderForm?.closest('.panel');
+    if (!timeoutFieldWrap || !providerPanel) {
+        return;
+    }
+    if (providerPanel.querySelector('#agentGlobalSettingsCard')) {
+        return;
+    }
+
+    const settingsCard = document.createElement('div');
+    const batchTuning = '';
+    const exportSummary = '';
+    settingsCard.id = 'agentGlobalSettingsCard';
+    settingsCard.className = 'agent-global-settings sub-list-wrap';
+    settingsCard.innerHTML = `
+        <div class="sub-list-title">Agent 全局设置</div>
+        <div class="agent-setting-note">
+            这些配置作用于整个 Agent 运行层，不绑定任何供应商。
+        </div>
+        <div class="form-actions">
+            <button id="saveAgentSettingsBtn" type="button" class="ghost-btn">保存 Agent 设置</button>
+        </div>
+        ${batchTuning ? `<div class="agent-runtime-row"><span>批量策略</span><strong>${escapeHtml(batchTuning)}</strong></div>` : ''}
+        ${exportSummary ? `<div class="agent-runtime-row"><span>最近导出</span><strong>${escapeHtml(exportSummary)}</strong></div>` : ''}
+    `;
+
+    const providerListWrap = providerPanel.querySelector('.sub-list-wrap');
+    providerPanel.insertBefore(settingsCard, providerListWrap || null);
+    settingsCard.insertBefore(timeoutFieldWrap, settingsCard.querySelector('.form-actions'));
+
+    settingsCard.querySelector('#saveAgentSettingsBtn').addEventListener('click', async () => {
+        const agentSettings = readAgentSettingsPayload();
+        await window.xbrowser.saveSettings({ agent: agentSettings });
+        showToast('Agent 全局设置已保存。');
+    });
+}
+
 function mountAgentSettingsFields() {
     const timeoutFieldWrap = agentToolTimeoutInput?.closest('.grid.two');
     const providerPanel = agentProviderForm?.closest('.panel');
@@ -215,7 +374,7 @@ function mountAgentSettingsFields() {
     settingsCard.innerHTML = `
         <div class="sub-list-title">Agent 全局设置</div>
         <div class="agent-setting-note">
-            这些配置作用于整个 Agent 运行层，不绑定任何供应商。
+            这些配置作用于整个 Agent 运行层，不绑定任何单个提供商。
         </div>
         <div class="form-actions">
             <button id="saveAgentSettingsBtn" type="button" class="ghost-btn">保存 Agent 设置</button>
@@ -257,7 +416,7 @@ function renderLaunchProgressInline(profileId) {
 }
 
 function renderStats() {
-    document.getElementById('statProfiles').textContent = String(appState.profiles.length);
+    document.getElementById('statProfiles').textContent = String(appState.profiles.filter((profile) => !profile.deletedAt).length);
     document.getElementById('statProxies').textContent = String(appState.settings.proxies.length);
     document.getElementById('statRunning').textContent = String(appState.runtime.running.length);
     document.getElementById('sidebarRuntime').textContent = appState.runtime.mihomoReady
@@ -287,13 +446,188 @@ function renderStats() {
         : (appState.runtime.apiUrl ? `API ${appState.runtime.apiUrl}` : 'API 未启用');
 }
 
-function renderProxySelect() {
-    const select = document.getElementById('profileProxyId');
+function renderProjectOptions() {
+    const projects = getProjects();
+    const projectOptions = projects.map((project) => (
+        `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)}</option>`
+    ));
+    profileProjectIdSelect.innerHTML = projectOptions.join('');
+
+    const filterOptions = ['<option value="all">全部项目</option>']
+        .concat(projectOptions);
+    homeProjectFilterSelect.innerHTML = filterOptions.join('');
+    batchMoveProjectIdSelect.innerHTML = '<option value="">移动到项目</option>' + projectOptions.join('');
+
+    const editorOptions = ['<option value="">新项目</option>'].concat(projectOptions).join('');
+    projectEditorIdSelect.innerHTML = editorOptions;
+
+    const selectedHomeProjectId = homeProjectId === 'all' || projects.some((project) => project.id === homeProjectId)
+        ? homeProjectId
+        : 'all';
+    homeProjectFilterSelect.value = selectedHomeProjectId;
+    if (!projects.some((project) => project.id === batchMoveProjectIdSelect.value)) {
+        batchMoveProjectIdSelect.value = '';
+    }
+
+    const currentProfileProjectId = profileProjectIdSelect.dataset.pendingValue || profileProjectIdSelect.value || projects[0]?.id || '';
+    profileProjectIdSelect.value = projects.some((project) => project.id === currentProfileProjectId)
+        ? currentProfileProjectId
+        : (projects[0]?.id || '');
+    delete profileProjectIdSelect.dataset.pendingValue;
+
+    const currentEditorProjectId = projectEditorIdSelect.dataset.pendingValue || projectEditorIdSelect.value || '';
+    projectEditorIdSelect.value = currentEditorProjectId === '' || projects.some((project) => project.id === currentEditorProjectId)
+        ? currentEditorProjectId
+        : '';
+    delete projectEditorIdSelect.dataset.pendingValue;
+}
+
+function renderAccountProfileOptions() {
+    const profiles = getActiveProfiles();
+    const options = ['<option value="">未绑定环境</option>'].concat(profiles.map((profile) => (
+        `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`
+    )));
+    accountProfileIdSelect.innerHTML = options.join('');
+
+    const currentProfileId = accountProfileIdSelect.dataset.pendingValue || accountProfileIdSelect.value || '';
+    accountProfileIdSelect.value = currentProfileId && profiles.some((profile) => profile.id === currentProfileId)
+        ? currentProfileId
+        : '';
+    delete accountProfileIdSelect.dataset.pendingValue;
+}
+
+function renderProfileExtensionOptions(selectedIds = null) {
+    const extensions = getExtensions();
+    const selected = new Set(Array.isArray(selectedIds)
+        ? selectedIds
+        : Array.from(profileExtensionList.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value));
+
+    if (!extensions.length) {
+        profileExtensionList.innerHTML = '<span class="profile-meta">当前还没有可用扩展，先去扩展中心导入。</span>';
+        return;
+    }
+
+    profileExtensionList.innerHTML = extensions.map((extension) => `
+        <label class="small-btn">
+            <input type="checkbox" class="profile-extension-checkbox" value="${escapeHtml(extension.id)}" ${selected.has(extension.id) ? 'checked' : ''}>
+            ${escapeHtml(extension.name)}${extension.enabled ? '' : ' (已停用)'}
+        </label>
+    `).join('');
+}
+
+function fillProjectForm(project = null) {
+    const current = project || getProjectById(projectEditorIdSelect.value) || getProjects()[0] || null;
+    projectEditorIdSelect.value = current?.id || '';
+    projectNameInput.value = current?.name || '';
+    projectColorInput.value = current?.color || '#0f766e';
+    projectNotesInput.value = current?.notes || '';
+    deleteProjectBtn.disabled = !current?.id || current.id === 'default';
+}
+
+function getVisibleHomeProfiles() {
     const proxies = appState.settings.proxies || [];
-    select.innerHTML = '<option value="">直连</option>' + proxies.map((proxy) => {
+    return appState.profiles.filter((profile) => {
+        if (profile.deletedAt) return false;
+        const isRunning = !!getRunning(profile.id);
+        if (homeFilter === 'running' && !isRunning) return false;
+        if (homeFilter === 'stopped' && isRunning) return false;
+        if (homeProjectId !== 'all' && profile.projectId !== homeProjectId) return false;
+        if (!homeSearch) return true;
+
+        const proxyName = proxies.find((item) => item.id === profile.proxyId)?.name || '';
+        const projectName = (getProjectById(profile.projectId) || getProjects()[0])?.name || '';
+        const text = [profile.name, profile.notes, projectName, proxyName, ...(profile.tags || [])]
+            .join(' ')
+            .toLowerCase();
+        return text.includes(homeSearch);
+    });
+}
+
+function syncProfileSelectionState() {
+    const validProfileIds = new Set(
+        appState.profiles
+            .filter((profile) => !profile.deletedAt)
+            .map((profile) => profile.id)
+    );
+    Array.from(selectedProfileIds).forEach((profileId) => {
+        if (!validProfileIds.has(profileId)) {
+            selectedProfileIds.delete(profileId);
+        }
+    });
+
+    const visibleProfiles = getVisibleHomeProfiles();
+    const selectableIds = visibleProfiles.map((profile) => profile.id);
+    const selectedVisibleCount = selectableIds.filter((profileId) => selectedProfileIds.has(profileId)).length;
+    selectAllProfilesInput.checked = selectableIds.length > 0 && selectedVisibleCount === selectableIds.length;
+    selectAllProfilesInput.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < selectableIds.length;
+    allocateProxyBtn.textContent = selectedProfileIds.size ? `自动分配到已选环境 (${selectedProfileIds.size})` : '自动分配到已选环境';
+    batchBindProxyBtn.textContent = selectedProfileIds.size ? `批量绑定代理 (${selectedProfileIds.size})` : '批量绑定代理';
+    batchMoveBtn.textContent = selectedProfileIds.size ? `批量移动 (${selectedProfileIds.size})` : '批量移动';
+    clearProfileSelectionBtn.disabled = !selectedProfileIds.size;
+}
+
+function renderProxySelect() {
+    const proxies = appState.settings.proxies || [];
+    document.getElementById('profileProxyId').innerHTML = '<option value="">直连</option>' + proxies.map((proxy) => {
         const latency = proxy.latency > 0 ? ` · ${proxy.latency}ms` : '';
         return `<option value="${proxy.id}">${escapeHtml(proxy.name)}${latency}</option>`;
     }).join('');
+
+    const currentBatchProxyId = batchProxyIdSelect.value || '';
+    batchProxyIdSelect.innerHTML = '<option value="">选择批量代理</option><option value="__direct__">切换为直连</option>' + proxies.map((proxy) => {
+        const location = [proxy.countryCode, proxy.city].filter(Boolean).join('/');
+        const locationMeta = location ? ` · ${location}` : '';
+        return `<option value="${proxy.id}">${escapeHtml(proxy.name)}${locationMeta}</option>`;
+    }).join('');
+    batchProxyIdSelect.value = currentBatchProxyId && (
+        currentBatchProxyId === '__direct__' || proxies.some((proxy) => proxy.id === currentBatchProxyId)
+    )
+        ? currentBatchProxyId
+        : '';
+}
+
+function getVisibleProxies() {
+    const maxLatency = Math.max(0, Number(proxyLatencyFilter) || 0);
+    return (appState.settings.proxies || []).filter((proxy) => {
+        if (proxyCountryFilter && String(proxy.countryCode || '').trim().toUpperCase() !== proxyCountryFilter) {
+            return false;
+        }
+        if (proxyCityFilter && String(proxy.city || '').trim() !== proxyCityFilter) {
+            return false;
+        }
+        if (maxLatency > 0 && (!(Number(proxy.latency) > 0) || Number(proxy.latency) > maxLatency)) {
+            return false;
+        }
+        return true;
+    });
+}
+
+function renderProxyFilters() {
+    const proxies = appState.settings.proxies || [];
+    const countryOptions = Array.from(new Set(proxies.map((proxy) => String(proxy.countryCode || '').trim().toUpperCase()).filter(Boolean))).sort();
+    const cityOptions = Array.from(new Set(proxies
+        .filter((proxy) => !proxyCountryFilter || String(proxy.countryCode || '').trim().toUpperCase() === proxyCountryFilter)
+        .map((proxy) => String(proxy.city || '').trim())
+        .filter(Boolean))).sort((left, right) => left.localeCompare(right, 'zh-CN'));
+    const currentMode = proxyAllocationModeSelect.value || appState.settings.proxyAllocation?.mode || 'manual';
+
+    proxyCountryFilterSelect.innerHTML = '<option value="">全部国家</option>' + countryOptions.map((countryCode) => (
+        `<option value="${escapeHtml(countryCode)}">${escapeHtml(countryCode)}</option>`
+    )).join('');
+    proxyCountryFilterSelect.value = countryOptions.includes(proxyCountryFilter) ? proxyCountryFilter : '';
+    proxyCountryFilter = proxyCountryFilterSelect.value || '';
+
+    proxyCityFilterSelect.innerHTML = '<option value="">全部城市</option>' + cityOptions.map((city) => (
+        `<option value="${escapeHtml(city)}">${escapeHtml(city)}</option>`
+    )).join('');
+    proxyCityFilterSelect.value = cityOptions.includes(proxyCityFilter) ? proxyCityFilter : '';
+    proxyCityFilter = proxyCityFilterSelect.value || '';
+
+    proxyLatencyFilterSelect.value = ['200', '500', '1000'].includes(String(proxyLatencyFilter)) ? String(proxyLatencyFilter) : '';
+    proxyAllocationModeSelect.value = ['manual', 'round-robin', 'sticky', 'geo-match'].includes(currentMode) ? currentMode : 'manual';
+    allocateProxyBtn.textContent = selectedProfileIds.size
+        ? `自动分配到已选环境 (${selectedProfileIds.size})`
+        : '自动分配到已选环境';
 }
 
 function getAgentRuntime() {
@@ -332,6 +666,7 @@ function getAgentBatchCounts(batch = getAgentBatchState()) {
 }
 
 function renderProfilePreview() {
+    const geolocation = currentFingerprintDraft.geolocation || {};
     const preview = {
         种子: currentFingerprintDraft.seed || '新建',
         设备预设: currentFingerprintDraft.presetId || '自动',
@@ -343,6 +678,13 @@ function renderProfilePreview() {
         内存GB: document.getElementById('profileMemory').value || '自动',
         屏幕: `${document.getElementById('profileWidth').value || '?'} x ${document.getElementById('profileHeight').value || '?'}`,
         缩放比: currentFingerprintDraft.devicePixelRatio || '自动',
+        WebRTC: document.getElementById('profileWebrtcMode').value || 'proxy',
+        定位: geolocation.mode === 'manual'
+            ? `${geolocation.latitude || 0}, ${geolocation.longitude || 0}`
+            : (geolocation.mode || 'auto'),
+        字体数: Array.isArray(currentFingerprintDraft.fonts) ? currentFingerprintDraft.fonts.length : 0,
+        WebGPU: currentFingerprintDraft.webgpu?.enabled !== false ? (currentFingerprintDraft.gpuTier || 'medium') : '关闭',
+        DNT: currentFingerprintDraft.doNotTrack || '关闭',
         WebGL厂商: currentFingerprintDraft.webglVendor || '自动',
         WebGL渲染器: currentFingerprintDraft.webglRenderer || '自动'
     };
@@ -354,11 +696,45 @@ function readOptionalNumber(elementId) {
     return raw ? Number(raw) : 0;
 }
 
+function parseStringListInput(elementId) {
+    return Array.from(new Set(document.getElementById(elementId).value
+        .split(/[\r\n,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean)));
+}
+
+function parseSpeechVoicesInput() {
+    return document.getElementById('profileSpeechVoices').value
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line, index) => {
+            const [name, lang, voiceURI] = line.split('|').map((item) => item.trim());
+            return {
+                default: index === 0,
+                localService: true,
+                name: name || voiceURI || `Voice-${index + 1}`,
+                lang: lang || document.getElementById('profileLanguage').value.trim() || 'en-US',
+                voiceURI: voiceURI || name || `Voice-${index + 1}`
+            };
+        })
+        .filter((item) => item.name && item.voiceURI);
+}
+
+function formatSpeechVoices(voices = []) {
+    return Array.isArray(voices)
+        ? voices.map((voice) => [voice.name, voice.lang, voice.voiceURI].filter(Boolean).join('|')).join('\n')
+        : '';
+}
+
 function captureFingerprintDraftFromForm() {
     const language = document.getElementById('profileLanguage').value.trim() || 'auto';
     const languages = language === 'auto'
         ? []
         : Array.from(new Set([language, language.split('-')[0]].filter(Boolean)));
+    const geolocationMode = document.getElementById('profileGeoMode').value || 'auto';
+    const fonts = parseStringListInput('profileFonts');
+    const speechVoices = parseSpeechVoicesInput();
 
     currentFingerprintDraft = {
         ...currentFingerprintDraft,
@@ -373,7 +749,23 @@ function captureFingerprintDraftFromForm() {
         screen: {
             width: readOptionalNumber('profileWidth'),
             height: readOptionalNumber('profileHeight')
-        }
+        },
+        webrtcMode: document.getElementById('profileWebrtcMode').value || 'proxy',
+        geolocation: {
+            mode: geolocationMode,
+            latitude: geolocationMode === 'manual' ? readOptionalNumber('profileGeoLatitude') : 0,
+            longitude: geolocationMode === 'manual' ? readOptionalNumber('profileGeoLongitude') : 0,
+            accuracy: readOptionalNumber('profileGeoAccuracy') || 30
+        },
+        fonts,
+        clientRectsNoise: readOptionalNumber('profileClientRectsNoise'),
+        audioContextNoise: readOptionalNumber('profileAudioContextNoise'),
+        speechVoices,
+        gpuTier: document.getElementById('profileGpuTier').value || 'medium',
+        webgpu: {
+            enabled: document.getElementById('profileWebgpuEnabled').checked !== false
+        },
+        doNotTrack: document.getElementById('profileDoNotTrack').value || ''
     };
 }
 
@@ -392,6 +784,18 @@ function applyFingerprintToForm(fingerprint = {}) {
     document.getElementById('profileMemory').value = fingerprint.deviceMemory || '';
     document.getElementById('profileWidth').value = fingerprint.screen?.width || '';
     document.getElementById('profileHeight').value = fingerprint.screen?.height || '';
+    document.getElementById('profileWebrtcMode').value = fingerprint.webrtcMode || 'proxy';
+    document.getElementById('profileGeoMode').value = fingerprint.geolocation?.mode || 'auto';
+    document.getElementById('profileGeoLatitude').value = fingerprint.geolocation?.latitude || '';
+    document.getElementById('profileGeoLongitude').value = fingerprint.geolocation?.longitude || '';
+    document.getElementById('profileGeoAccuracy').value = fingerprint.geolocation?.accuracy || '';
+    document.getElementById('profileFonts').value = Array.isArray(fingerprint.fonts) ? fingerprint.fonts.join('\n') : '';
+    document.getElementById('profileClientRectsNoise').value = fingerprint.clientRectsNoise || '';
+    document.getElementById('profileAudioContextNoise').value = fingerprint.audioContextNoise || fingerprint.audioNoise || '';
+    document.getElementById('profileSpeechVoices').value = formatSpeechVoices(fingerprint.speechVoices || []);
+    document.getElementById('profileGpuTier').value = fingerprint.gpuTier || 'medium';
+    document.getElementById('profileWebgpuEnabled').checked = fingerprint.webgpu?.enabled !== false;
+    document.getElementById('profileDoNotTrack').value = fingerprint.doNotTrack || '';
 
     renderProfilePreview();
 }
@@ -404,14 +808,55 @@ async function randomizeFingerprintFields(overrides = {}) {
 
 function fillProfileForm(profile = null) {
     document.getElementById('profileId').value = profile?.id || '';
+    document.getElementById('profileTemplateId').value = profile?.templateId || '';
     document.getElementById('profileName').value = profile?.name || '';
     document.getElementById('profileStartUrl').value = isBuiltInStartUrl(profile?.startUrl)
         ? ''
         : (profile?.startUrl || '');
+    profileProjectIdSelect.value = profile?.projectId || getProjects()[0]?.id || '';
     document.getElementById('profileProxyId').value = profile?.proxyId || '';
     document.getElementById('profileTags').value = Array.isArray(profile?.tags) ? profile.tags.join(', ') : '';
     document.getElementById('profileNotes').value = profile?.notes || '';
+    renderProfileExtensionOptions(profile?.extensionIds || []);
+    syncBatchCreateForm(profile);
     applyFingerprintToForm(profile?.fingerprint || { platform: 'Win32' });
+}
+
+function syncTemplateEditor(template = null) {
+    document.getElementById('templateEditorId').value = template?.id || '';
+    templateSelect.value = template?.id || '';
+    templateNameInput.value = template?.name || '';
+    templateNotesInput.value = template?.notes || '';
+    applyTemplateBtn.disabled = !template?.id;
+    deleteTemplateBtn.disabled = !template?.id;
+}
+
+function renderTemplatePanel() {
+    const currentValue = templateSelect.value || document.getElementById('templateEditorId').value || '';
+    const templates = getTemplates();
+    const options = ['<option value="">请选择模板</option>']
+        .concat(templates.map((template) => (
+            `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`
+        )));
+    templateSelect.innerHTML = options.join('');
+
+    const selected = getTemplateById(currentValue);
+    if (!selected && document.getElementById('templateEditorId').value) {
+        syncTemplateEditor(null);
+        return;
+    }
+
+    templateSelect.value = selected?.id || '';
+    applyTemplateBtn.disabled = !selected?.id;
+    deleteTemplateBtn.disabled = !selected?.id;
+}
+
+function syncBatchCreateForm(profile = null) {
+    batchCreateCountInput.value = batchCreateCountInput.value || '10';
+    batchCreatePrefixInput.value = profile?.name || batchCreatePrefixInput.value || '';
+    batchCreateProxyModeSelect.value = batchCreateProxyModeSelect.value || 'current';
+    batchCreateInheritTagsInput.checked = batchCreateInheritTagsInput.checked !== false;
+    batchCreateRandomizeFingerprintInput.checked = batchCreateRandomizeFingerprintInput.checked !== false;
 }
 
 function getProfileStatus(profileId) {
@@ -428,31 +873,47 @@ function renderProfileActions(profileId) {
     return `
         <div class="profile-actions">
             <button class="small-btn" data-action="edit-profile" data-id="${profileId}">编辑</button>
+            <button class="small-btn" data-action="clone-profile" data-id="${profileId}">克隆</button>
+            <button class="small-btn" data-action="export-profile" data-id="${profileId}">导出</button>
+            <button class="small-btn" data-action="manage-profile-account" data-id="${profileId}">账号</button>
             ${renderLaunchProgressInline(profileId)}
             <button class="small-btn" data-action="stop-profile" data-id="${profileId}">停止</button>
             <button class="small-btn" data-action="clear-profile-cache" data-id="${profileId}">清缓存</button>
-            <button class="small-btn danger" data-action="delete-profile" data-id="${profileId}">删除</button>
+            <button class="small-btn danger" data-action="trash-profile" data-id="${profileId}">回收站</button>
         </div>
     `;
 }
 
+function renderTrashActions(profileId) {
+    return `
+        <div class="profile-actions">
+            <button class="small-btn" data-action="restore-profile" data-id="${profileId}">恢复</button>
+            <button class="small-btn danger" data-action="destroy-profile" data-id="${profileId}">彻底删除</button>
+        </div>
+    `;
+}
+
+function getProfileAccountSummary(profileId) {
+    const linkedAccounts = getAccountsByProfileId(profileId);
+    if (!linkedAccounts.length) {
+        return '未绑定账号';
+    }
+
+    if (linkedAccounts.length === 1) {
+        const account = linkedAccounts[0];
+        return `账号 ${account.platform || '-'} / ${account.username || account.email || account.phone || account.id}`;
+    }
+
+    return `已绑定 ${linkedAccounts.length} 个账号`;
+}
+
 function renderProfileTable() {
     const proxies = appState.settings.proxies || [];
-    const filtered = appState.profiles.filter((profile) => {
-        const isRunning = !!getRunning(profile.id);
-        if (homeFilter === 'running' && !isRunning) return false;
-        if (homeFilter === 'stopped' && isRunning) return false;
-        if (!homeSearch) return true;
-
-        const proxyName = proxies.find((item) => item.id === profile.proxyId)?.name || '';
-        const text = [profile.name, profile.notes, proxyName, ...(profile.tags || [])]
-            .join(' ')
-            .toLowerCase();
-        return text.includes(homeSearch);
-    });
+    const filtered = getVisibleHomeProfiles();
 
     if (!filtered.length) {
-        profileTableBody.innerHTML = '<tr><td colspan="7">当前筛选条件下没有环境。</td></tr>';
+        profileTableBody.innerHTML = '<tr><td colspan="8">当前筛选条件下没有环境。</td></tr>';
+        syncProfileSelectionState();
         return;
     }
 
@@ -463,12 +924,15 @@ function renderProfileTable() {
         }
 
         const proxy = proxies.find((item) => item.id === profile.proxyId);
+        const project = getProjectById(profile.projectId) || getProjects()[0];
         return `
             <tr>
+                <td><input type="checkbox" class="profile-select" data-id="${profile.id}" ${selectedProfileIds.has(profile.id) ? 'checked' : ''}></td>
                 <td>${escapeHtml(getProfileCode(profile))}</td>
                 <td>
                     <div class="profile-title">${escapeHtml(profile.name)}</div>
-                    <div class="profile-meta">${escapeHtml(isBuiltInStartUrl(profile.startUrl) ? '内置检测页' : (profile.startUrl || '-'))}</div>
+                    <div class="profile-meta">${escapeHtml(getProfileAccountSummary(profile.id))}</div>
+                    <div class="profile-meta">${escapeHtml(project?.name || '默认项目')} · ${escapeHtml(isBuiltInStartUrl(profile.startUrl) ? '内置检测页' : (profile.startUrl || '-'))}</div>
                 </td>
                 <td>${escapeHtml(proxy ? proxy.name : '直连')}</td>
                 <td>${escapeHtml((profile.tags || []).join(', ') || '-')}</td>
@@ -478,12 +942,40 @@ function renderProfileTable() {
             </tr>
         `;
     }).join('');
+    syncProfileSelectionState();
+}
+
+function renderTrashTable() {
+    const deletedProfiles = appState.profiles
+        .filter((profile) => !!profile.deletedAt)
+        .sort((left, right) => Number(right.deletedAt || 0) - Number(left.deletedAt || 0));
+
+    if (!deletedProfiles.length) {
+        trashTableBody.innerHTML = '<tr><td colspan="5">回收站中还没有环境。</td></tr>';
+        return;
+    }
+
+    trashTableBody.innerHTML = deletedProfiles.map((profile) => {
+        const project = getProjectById(profile.deletedFromProjectId) || getProjects()[0];
+        return `
+            <tr>
+                <td>${escapeHtml(getProfileCode(profile))}</td>
+                <td>
+                    <div class="profile-title">${escapeHtml(profile.name)}</div>
+                    <div class="profile-meta">${escapeHtml(profile.notes || '-')}</div>
+                </td>
+                <td>${escapeHtml(project?.name || '默认项目')}</td>
+                <td>${escapeHtml(formatDate(profile.deletedAt))}</td>
+                <td>${renderTrashActions(profile.id)}</td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function renderProxyTable() {
-    const proxies = appState.settings.proxies || [];
+    const proxies = getVisibleProxies();
     if (!proxies.length) {
-        proxyTableBody.innerHTML = '<tr><td colspan="6">当前还没有导入任何代理。</td></tr>';
+        proxyTableBody.innerHTML = '<tr><td colspan="8">当前还没有导入任何代理。</td></tr>';
         return;
     }
 
@@ -492,8 +984,10 @@ function renderProxyTable() {
             <td>${escapeHtml(proxy.name)}</td>
             <td>${escapeHtml(getProxyProtocol(proxy))}</td>
             <td>${escapeHtml(proxy.source === 'subscription' ? '订阅' : proxy.source === 'file' ? '文件' : '手动')}</td>
+            <td>${escapeHtml(getProxyGeoSummary(proxy))}</td>
+            <td><span class="status-pill ${getProxyStatusMeta(proxy.status).className}">${escapeHtml(getProxyStatusMeta(proxy.status).label)}</span></td>
             <td>${proxy.latency > 0 ? `${proxy.latency}ms` : '-'}</td>
-            <td>${escapeHtml(formatDate(proxy.updatedAt))}</td>
+            <td>${escapeHtml(formatDate(proxy.lastCheckedAt || proxy.updatedAt))}</td>
             <td>
                 <div class="proxy-actions">
                     <button class="small-btn" data-action="test-proxy" data-id="${proxy.id}">测速</button>
@@ -524,6 +1018,198 @@ function renderSubscriptions() {
             </div>
         </div>
     `).join('');
+}
+
+function getAccountStatusMeta(status) {
+    const current = String(status || '').trim() || 'active';
+    if (current === 'blocked') {
+        return { label: '受限', className: 'stopped' };
+    }
+    if (current === 'idle') {
+        return { label: '闲置', className: 'launching' };
+    }
+    return { label: '可用', className: 'running' };
+}
+
+function getProxyStatusMeta(status) {
+    const current = String(status || '').trim() || 'unknown';
+    if (current === 'ok') {
+        return { label: '可用', className: 'running' };
+    }
+    if (current === 'error') {
+        return { label: '异常', className: 'stopped' };
+    }
+    return { label: '未检测', className: 'launching' };
+}
+
+function getProxyGeoSummary(proxy = {}) {
+    const location = [proxy.countryCode, proxy.city].filter(Boolean).join(' / ');
+    const provider = String(proxy.provider || '').trim();
+    if (location && provider) {
+        return `${location} · ${provider}`;
+    }
+    return location || provider || '-';
+}
+
+function fillAccountForm(account = null) {
+    document.getElementById('accountId').value = account?.id || '';
+    document.getElementById('accountPlatform').value = account?.platform || '';
+    document.getElementById('accountUsername').value = account?.username || '';
+    document.getElementById('accountPassword').value = account?.password || '';
+    document.getElementById('accountEmail').value = account?.email || '';
+    document.getElementById('accountPhone').value = account?.phone || '';
+    document.getElementById('accountTwoFactorSecret').value = account?.twoFactorSecret || '';
+    accountProfileIdSelect.value = account?.profileId || '';
+    document.getElementById('accountStatus').value = account?.status || 'active';
+    document.getElementById('accountNotes').value = account?.notes || '';
+}
+
+function collectAccountPayload() {
+    return {
+        id: document.getElementById('accountId').value || undefined,
+        platform: document.getElementById('accountPlatform').value.trim(),
+        username: document.getElementById('accountUsername').value.trim(),
+        password: document.getElementById('accountPassword').value,
+        email: document.getElementById('accountEmail').value.trim(),
+        phone: document.getElementById('accountPhone').value.trim(),
+        twoFactorSecret: document.getElementById('accountTwoFactorSecret').value.trim(),
+        profileId: accountProfileIdSelect.value || '',
+        status: document.getElementById('accountStatus').value || 'active',
+        notes: document.getElementById('accountNotes').value.trim()
+    };
+}
+
+function getAccountCookieCount(account) {
+    try {
+        const parsed = JSON.parse(String(account?.cookies || '').trim() || '[]');
+        if (Array.isArray(parsed)) {
+            return parsed.length;
+        }
+        if (parsed && Array.isArray(parsed.cookies)) {
+            return parsed.cookies.length;
+        }
+    } catch (error) {
+        return 0;
+    }
+    return 0;
+}
+
+function getAccountLocalStorageSummary(account) {
+    try {
+        const raw = String(account?.localStorage || '').trim();
+        if (!raw) {
+            return { origins: 0, items: 0 };
+        }
+
+        const parsed = JSON.parse(raw);
+        const origins = Array.isArray(parsed)
+            ? parsed
+            : (Array.isArray(parsed?.origins) ? parsed.origins : []);
+        const originCount = origins.length;
+        const itemCount = origins.reduce((total, entry) => {
+            if (Array.isArray(entry?.items)) {
+                return total + entry.items.length;
+            }
+            if (Array.isArray(entry?.entries)) {
+                return total + entry.entries.length;
+            }
+            return total;
+        }, 0);
+        return {
+            origins: originCount,
+            items: itemCount
+        };
+    } catch (error) {
+        return { origins: 0, items: 0 };
+    }
+}
+
+function getExtensionBoundProfileCount(extensionId) {
+    return appState.profiles.filter((profile) => !profile.deletedAt && Array.isArray(profile.extensionIds) && profile.extensionIds.includes(extensionId)).length;
+}
+
+function getSelectedActiveProfileIds() {
+    return Array.from(selectedProfileIds).filter((profileId) => {
+        const profile = appState.profiles.find((item) => item.id === profileId);
+        return profile && !profile.deletedAt;
+    });
+}
+
+function renderExtensionTable() {
+    const extensions = getExtensions();
+    if (!extensions.length) {
+        extensionTableBody.innerHTML = '<tr><td colspan="7">当前还没有导入任何扩展。</td></tr>';
+        return;
+    }
+
+    extensionTableBody.innerHTML = extensions.map((extension) => `
+        <tr>
+            <td>
+                <div class="profile-title">${escapeHtml(extension.name)}</div>
+                <div class="profile-meta">${escapeHtml(extension.path || '-')}</div>
+            </td>
+            <td>${escapeHtml(extension.version || '-')}</td>
+            <td>${escapeHtml(extension.sourceType || '-')}</td>
+            <td>${escapeHtml(extension.scope || 'profile')}</td>
+            <td>${extension.enabled ? '<span class="status-pill running">已启用</span>' : '<span class="status-pill stopped">已停用</span>'}</td>
+            <td>${escapeHtml(`${getExtensionBoundProfileCount(extension.id)} 个环境`)}</td>
+            <td>
+                <div class="profile-actions">
+                    <button class="small-btn" data-action="assign-extension" data-id="${extension.id}">分配到已选环境</button>
+                    <button class="small-btn" data-action="remove-extension" data-id="${extension.id}">从已选移除</button>
+                    <button class="small-btn" data-action="toggle-extension" data-id="${extension.id}">${extension.enabled ? '停用' : '启用'}</button>
+                    <button class="small-btn danger" data-action="delete-extension" data-id="${extension.id}">删除</button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderAccountTable() {
+    const accounts = getAccounts();
+    if (!accounts.length) {
+        accountTableBody.innerHTML = '<tr><td colspan="6">当前还没有保存任何账号。</td></tr>';
+        return;
+    }
+
+    accountTableBody.innerHTML = accounts.map((account) => {
+        const profile = appState.profiles.find((item) => item.id === account.profileId) || null;
+        const project = profile ? getProjectById(profile.projectId) : null;
+        const statusMeta = getAccountStatusMeta(account.status);
+        const contact = [account.email, account.phone].filter(Boolean).join(' / ') || '-';
+        const cookieCount = getAccountCookieCount(account);
+        const localStorageSummary = getAccountLocalStorageSummary(account);
+        const binding = profile
+            ? `${profile.name}${project ? ` / ${project.name}` : ''}`
+            : '未绑定';
+
+        return `
+            <tr>
+                <td>
+                    <div class="profile-title">${escapeHtml(account.platform || '-')}</div>
+                    <div class="profile-meta">${escapeHtml(account.username || account.email || account.phone || '-')}</div>
+                    <div class="profile-meta">${escapeHtml(`Cookie ${cookieCount} 条 / Storage ${localStorageSummary.origins} 站点 ${localStorageSummary.items} 项`)}</div>
+                </td>
+                <td>
+                    <div class="profile-title">${escapeHtml(contact)}</div>
+                    <div class="profile-meta">${escapeHtml(account.twoFactorSecret ? '已保存二步验证码密钥' : '未保存二步验证码密钥')}</div>
+                </td>
+                <td>${escapeHtml(binding)}</td>
+                <td><span class="status-pill ${statusMeta.className}">${escapeHtml(statusMeta.label)}</span></td>
+                <td>${escapeHtml(formatDate(account.updatedAt || account.createdAt))}</td>
+                <td>
+                    <div class="profile-actions">
+                        <button class="small-btn" data-action="edit-account" data-id="${account.id}">编辑</button>
+                        <button class="small-btn" data-action="export-account-cookies" data-id="${account.id}">导出 Cookie</button>
+                        <button class="small-btn" data-action="import-account-cookies" data-id="${account.id}">导入 Cookie</button>
+                        <button class="small-btn" data-action="export-account-storage" data-id="${account.id}">导出 Storage</button>
+                        <button class="small-btn" data-action="import-account-storage" data-id="${account.id}">导入 Storage</button>
+                        <button class="small-btn danger" data-action="delete-account" data-id="${account.id}">删除</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function renderAgentModelOptions(provider = null) {
@@ -656,6 +1342,12 @@ function renderAgentRuntime() {
         ? (currentBatchTask?.profileName || '-')
         : (hasBatchState ? `${counts.total} 个窗口` : (runtimeAgent.profileName || '-'));
     const currentPage = currentBatchTask?.pageUrl || runtimeAgent.pageUrl || '-';
+    const batchTuning = hasBatchState
+        ? `并发 ${batch.concurrency || 1} / 重试 ${batch.maxRetries || 0} / 策略 ${(batch.failureStrategy || 'skip') === 'stop' ? '失败即停' : '跳过继续'}`
+        : '';
+    const exportSummary = batch.exportFilePath
+        ? `${batch.exportFilePath}${batch.exportedAt ? ` / ${formatDate(batch.exportedAt)}` : ''}`
+        : '';
     const browserState = batch.running || hasBatchState
         ? '按需接管或自动拉起批量窗口'
         : (sessionProfileRuntime ? '已连接真实窗口' : (runtimeAgent.profileId ? '将自动拉起窗口' : '-'));
@@ -688,6 +1380,12 @@ function renderAgentRuntime() {
         <div class="agent-runtime-row"><span>当前页面</span><strong>${escapeHtml(currentPage)}</strong></div>
         ${hasBatchState ? `<div class="agent-runtime-row"><span>批量统计</span><strong>${escapeHtml(`总数 ${counts.total} / 执行中 ${counts.running} / 成功 ${counts.success} / 失败 ${counts.error} / 停止 ${counts.stopped}`)}</strong></div>` : ''}
     `;
+    if (batchTuning) {
+        agentRuntimeCard.innerHTML += `<div class="agent-runtime-row"><span>批量策略</span><strong>${escapeHtml(batchTuning)}</strong></div>`;
+    }
+    if (exportSummary) {
+        agentRuntimeCard.innerHTML += `<div class="agent-runtime-row"><span>最近导出</span><strong>${escapeHtml(exportSummary)}</strong></div>`;
+    }
 
     providerModelsHint.textContent = activeProvider
         ? `当前编辑配置已缓存 ${activeProvider.models?.length || 0} 个模型，可继续手动补充模型 ID。`
@@ -705,12 +1403,36 @@ function renderAgentDocs() {
     `).join('');
 }
 
+function renderAgentCapabilities() {
+    const capabilityList = document.querySelector('.agent-capability-list');
+    if (!capabilityList) {
+        return;
+    }
+
+    const items = [
+        '页面快照',
+        '页面跳转',
+        '点击',
+        '单字段填写',
+        '多字段表单',
+        '文件上传',
+        '等待选择器',
+        '截图',
+        '页面信息'
+    ];
+
+    capabilityList.innerHTML = items
+        .map((item) => `<span class="capability-chip">${escapeHtml(item)}</span>`)
+        .join('');
+}
+
 function renderAgentPanel() {
     openAgentLaunchDialogBtn.textContent = '打开 Agent 控制台';
     renderAgentSettings();
     renderAgentProviderList();
     renderAgentRuntime();
     renderAgentDocs();
+    renderAgentCapabilities();
 
     const currentId = document.getElementById('agentProviderId').value;
     const editing = getAgentProviders().find((item) => item.id === currentId);
@@ -721,25 +1443,147 @@ function renderAgentPanel() {
     }
 }
 
+function renderSyncPanel() {
+    const syncState = getSyncState();
+    const profiles = getActiveProfiles();
+    const currentMasterId = syncState.running
+        ? syncState.masterProfileId
+        : (syncMasterProfileIdSelect.value || '');
+    const currentSlaveIds = new Set(syncState.running
+        ? syncState.slaveProfileIds
+        : Array.from(syncSlaveProfileList.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value));
+    const currentEventTypes = new Set(syncState.running
+        ? syncState.eventTypes
+        : Array.from(syncEventTypeList.querySelectorAll('input[type="checkbox"]:checked')).map((input) => input.value));
+
+    syncMasterProfileIdSelect.innerHTML = ['<option value="">选择主窗口</option>'].concat(profiles.map((profile) => (
+        `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`
+    ))).join('');
+    syncMasterProfileIdSelect.value = profiles.some((profile) => profile.id === currentMasterId) ? currentMasterId : '';
+
+    const eventTypeOptions = [
+        { value: 'navigation', label: '导航' },
+        { value: 'click', label: '点击' },
+        { value: 'input', label: '输入' },
+        { value: 'scroll', label: '滚动' }
+    ];
+    syncEventTypeList.innerHTML = eventTypeOptions.map((item) => `
+        <label class="small-btn">
+            <input type="checkbox" class="sync-event-type" value="${item.value}" ${currentEventTypes.has(item.value) ? 'checked' : ''} ${syncState.running ? 'disabled' : ''}>
+            ${item.label}
+        </label>
+    `).join('');
+
+    syncSlaveProfileList.innerHTML = profiles
+        .filter((profile) => profile.id !== syncMasterProfileIdSelect.value)
+        .map((profile) => `
+            <label class="small-btn">
+                <input type="checkbox" class="sync-slave-checkbox" value="${escapeHtml(profile.id)}" ${currentSlaveIds.has(profile.id) ? 'checked' : ''} ${syncState.running ? 'disabled' : ''}>
+                ${escapeHtml(profile.name)}
+            </label>
+        `).join('') || '<span class="profile-meta">当前没有可用从窗口。</span>';
+
+    const counts = syncState.counts || { total: 0, success: 0, error: 0 };
+    const master = profiles.find((profile) => profile.id === syncState.masterProfileId);
+    syncRuntimeCard.innerHTML = `
+        <div class="agent-runtime-row"><span>运行状态</span><strong>${escapeHtml(syncState.running ? '同步中' : '未启动')}</strong></div>
+        <div class="agent-runtime-row"><span>主窗口</span><strong>${escapeHtml(master?.name || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>事件类型</span><strong>${escapeHtml((syncState.eventTypes || []).join(' / ') || '-')}</strong></div>
+        <div class="agent-runtime-row"><span>总事件</span><strong>${escapeHtml(String(counts.total || 0))}</strong></div>
+        <div class="agent-runtime-row"><span>成功 / 失败</span><strong>${escapeHtml(`${counts.success || 0} / ${counts.error || 0}`)}</strong></div>
+        <div class="agent-runtime-row"><span>最近事件</span><strong>${escapeHtml(syncState.lastEvent?.type || '-')}</strong></div>
+    `;
+
+    if (!syncState.slaves?.length) {
+        syncSlaveTableBody.innerHTML = '<tr><td colspan="4">当前没有从窗口状态。</td></tr>';
+    } else {
+        syncSlaveTableBody.innerHTML = syncState.slaves.map((slave) => `
+            <tr>
+                <td>${escapeHtml(slave.profileName || slave.profileId)}</td>
+                <td>${escapeHtml(String(slave.success || 0))}</td>
+                <td>${escapeHtml(String(slave.error || 0))}</td>
+                <td>${escapeHtml(slave.lastError || (slave.lastEventAt ? `最近成功 ${formatDate(slave.lastEventAt)}` : '-'))}</td>
+            </tr>
+        `).join('');
+    }
+
+    if (!syncState.events?.length) {
+        syncEventLog.innerHTML = '<div class="sub-item">还没有同步事件。</div>';
+    } else {
+        syncEventLog.innerHTML = syncState.events.map((event) => `
+            <div class="sub-item">
+                <div>
+                    <div class="profile-title">${escapeHtml(event.type || '-')}</div>
+                    <div class="profile-meta">${escapeHtml(event.url || event.selector || event.href || '-')}</div>
+                </div>
+                <div class="profile-meta">${escapeHtml(formatDate(event.timestamp || Date.now()))}</div>
+            </div>
+        `).join('');
+    }
+
+    syncMasterProfileIdSelect.disabled = syncState.running;
+    startSyncBtn.disabled = syncState.running;
+    stopSyncBtn.disabled = !syncState.running;
+}
+
 function renderAll() {
     renderStats();
+    renderProjectOptions();
+    renderAccountProfileOptions();
+    renderProfileExtensionOptions();
+    renderTemplatePanel();
     renderProxySelect();
+    renderProxyFilters();
     renderProfileTable();
+    renderTrashTable();
+    renderExtensionTable();
+    renderAccountTable();
     renderProxyTable();
     renderSubscriptions();
     renderAgentPanel();
+    renderSyncPanel();
+    syncProfileSelectionState();
 }
 
 function collectProfilePayload() {
     captureFingerprintDraftFromForm();
     return {
         id: document.getElementById('profileId').value || undefined,
+        templateId: document.getElementById('profileTemplateId').value || '',
+        projectId: profileProjectIdSelect.value || getProjects()[0]?.id || 'default',
         name: document.getElementById('profileName').value.trim(),
         startUrl: document.getElementById('profileStartUrl').value.trim(),
         proxyId: document.getElementById('profileProxyId').value,
         tags: document.getElementById('profileTags').value.trim(),
         notes: document.getElementById('profileNotes').value.trim(),
+        extensionIds: Array.from(profileExtensionList.querySelectorAll('.profile-extension-checkbox:checked')).map((input) => input.value),
         fingerprint: clone(currentFingerprintDraft)
+    };
+}
+
+function collectProfileDraftPayload() {
+    const payload = collectProfilePayload();
+    return {
+        name: payload.name,
+        startUrl: payload.startUrl,
+        proxyId: payload.proxyId,
+        projectId: payload.projectId,
+        notes: payload.notes,
+        tags: payload.tags,
+        extensionIds: payload.extensionIds,
+        fingerprint: payload.fingerprint
+    };
+}
+
+function collectBatchCreatePayload() {
+    return {
+        count: Number(batchCreateCountInput.value) || 0,
+        namePrefix: batchCreatePrefixInput.value.trim() || document.getElementById('profileName').value.trim(),
+        proxyMode: batchCreateProxyModeSelect.value || 'current',
+        inheritTags: batchCreateInheritTagsInput.checked,
+        randomizeFingerprint: batchCreateRandomizeFingerprintInput.checked,
+        templateId: document.getElementById('profileTemplateId').value || '',
+        profileDraft: collectProfileDraftPayload()
     };
 }
 
@@ -752,7 +1596,40 @@ async function handleBodyActions(event) {
     if (action === 'edit-profile') {
         const profile = appState.profiles.find((item) => item.id === id);
         fillProfileForm(profile);
+        fillProjectForm(getProjectById(profile?.projectId) || getProjects()[0] || null);
+        syncTemplateEditor(getTemplateById(profile?.templateId || ''));
         setView('create');
+        return;
+    }
+
+    if (action === 'manage-profile-account') {
+        const linkedAccounts = getAccountsByProfileId(id);
+        if (linkedAccounts.length === 1) {
+            fillAccountForm(linkedAccounts[0]);
+        } else if (linkedAccounts.length > 1) {
+            fillAccountForm(linkedAccounts[0]);
+            showToast(`当前环境已绑定 ${linkedAccounts.length} 个账号，已打开最新一个。`);
+        } else {
+            fillAccountForm({
+                profileId: id,
+                status: 'active'
+            });
+        }
+        setView('accounts');
+        return;
+    }
+
+    if (action === 'clone-profile') {
+        await window.xbrowser.cloneProfile(id);
+        showToast('环境已克隆。');
+        return;
+    }
+
+    if (action === 'export-profile') {
+        const result = await window.xbrowser.exportProfiles({ ids: [id] });
+        if (!result?.canceled) {
+            showToast('环境导出完成。');
+        }
         return;
     }
 
@@ -786,18 +1663,36 @@ async function handleBodyActions(event) {
         return;
     }
 
-    if (action === 'delete-profile') {
-        if (!window.confirm('确定删除这个环境吗？')) return;
-        await window.xbrowser.deleteProfile(id);
+    if (action === 'trash-profile') {
+        if (!window.confirm('确定把这个环境移入回收站吗？')) return;
+        await window.xbrowser.trashProfile(id);
         clearLaunchProgress(id);
         renderProfileTable();
-        showToast('环境已删除。');
+        renderTrashTable();
+        showToast('环境已移入回收站。');
+        return;
+    }
+
+    if (action === 'restore-profile') {
+        await window.xbrowser.restoreProfile(id);
+        renderProfileTable();
+        renderTrashTable();
+        showToast('环境已恢复。');
+        return;
+    }
+
+    if (action === 'destroy-profile') {
+        if (!window.confirm('确定彻底删除这个环境吗？此操作无法恢复。')) return;
+        await window.xbrowser.destroyProfile(id);
+        clearLaunchProgress(id);
+        renderTrashTable();
+        showToast('环境已彻底删除。');
         return;
     }
 
     if (action === 'test-proxy') {
         await window.xbrowser.testProxy(id);
-        showToast('代理测速完成。');
+        showToast('代理检测完成。');
         return;
     }
 
@@ -818,6 +1713,89 @@ async function handleBodyActions(event) {
         if (!window.confirm('确定删除这个订阅以及其下所有节点吗？')) return;
         await window.xbrowser.deleteSubscription(id);
         showToast('订阅已删除。');
+        return;
+    }
+
+    if (action === 'toggle-extension') {
+        const extension = getExtensions().find((item) => item.id === id);
+        await window.xbrowser.toggleExtension({ id, enabled: !extension?.enabled });
+        showToast(extension?.enabled ? '扩展已停用。' : '扩展已启用。');
+        return;
+    }
+
+    if (action === 'assign-extension' || action === 'remove-extension') {
+        const profileIds = getSelectedActiveProfileIds();
+        if (!profileIds.length) {
+            showToast('请先在首页勾选环境。');
+            return;
+        }
+
+        const result = await window.xbrowser.batchAssignExtension({
+            extensionId: id,
+            profileIds,
+            mode: action === 'remove-extension' ? 'remove' : 'add'
+        });
+        showToast(result.mode === 'remove'
+            ? `已从 ${result.updated} 个环境移除扩展。`
+            : `已分配到 ${result.updated} 个环境。`);
+        return;
+    }
+
+    if (action === 'delete-extension') {
+        if (!window.confirm('确定删除这个扩展吗？已绑定到环境的配置会一并移除。')) return;
+        await window.xbrowser.deleteExtension(id);
+        showToast('扩展已删除。');
+        return;
+    }
+
+    if (action === 'edit-account') {
+        const account = getAccounts().find((item) => item.id === id);
+        fillAccountForm(account);
+        setView('accounts');
+        return;
+    }
+
+    if (action === 'delete-account') {
+        if (!window.confirm('确定删除这个账号吗？')) return;
+        await window.xbrowser.deleteAccount(id);
+        if (document.getElementById('accountId').value === id) {
+            fillAccountForm();
+        }
+        showToast('账号已删除。');
+        return;
+    }
+
+    if (action === 'export-account-cookies') {
+        const result = await window.xbrowser.exportAccountCookies({ accountId: id });
+        if (!result?.canceled) {
+            showToast(`已导出 ${result.exported} 条 Cookie。`);
+        }
+        return;
+    }
+
+    if (action === 'import-account-cookies') {
+        const result = await window.xbrowser.importAccountCookies({ accountId: id });
+        if (!result?.canceled) {
+            const applyHint = result.applied ? '，并已写入绑定环境' : '';
+            showToast(`已导入 ${result.imported} 条 Cookie${applyHint}。`);
+        }
+        return;
+    }
+
+    if (action === 'export-account-storage') {
+        const result = await window.xbrowser.exportAccountStorage({ accountId: id });
+        if (!result?.canceled) {
+            showToast(`已导出 ${result.exportedOrigins} 个站点、${result.exportedItems} 项 LocalStorage。`);
+        }
+        return;
+    }
+
+    if (action === 'import-account-storage') {
+        const result = await window.xbrowser.importAccountStorage({ accountId: id });
+        if (!result?.canceled) {
+            const applyHint = result.applied ? '，并已写入绑定环境' : '';
+            showToast(`已导入 ${result.importedOrigins} 个站点、${result.importedItems} 项 LocalStorage${applyHint}。`);
+        }
         return;
     }
 
@@ -848,6 +1826,13 @@ async function handleBodyActions(event) {
 
 async function boot() {
     appState = await window.xbrowser.bootstrap();
+    if (!Array.isArray(appState.templates)) {
+        appState.templates = await window.xbrowser.listTemplates();
+    }
+    if (!Array.isArray(appState.accounts)) {
+        appState.accounts = await window.xbrowser.listAccounts();
+    }
+    homeProjectId = appState.settings.ui?.homeProjectId || 'all';
     mountAgentSettingsFields();
     renderAll();
 
@@ -857,6 +1842,9 @@ async function boot() {
     setView(initialView);
 
     fillProfileForm();
+    fillProjectForm();
+    fillAccountForm();
+    syncTemplateEditor(null);
     fillAgentProviderForm(getActiveProvider());
     await randomizeFingerprintFields();
 }
@@ -870,11 +1858,279 @@ profileForm.addEventListener('submit', async (event) => {
         return;
     }
 
+    const currentTemplate = getTemplateById(payload.templateId || '');
     await window.xbrowser.saveProfile(payload);
     fillProfileForm();
+    syncTemplateEditor(currentTemplate);
     await randomizeFingerprintFields();
     setView('home');
     showToast('环境已保存。');
+});
+
+accountForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const payload = collectAccountPayload();
+    if (!payload.platform) {
+        showToast('账号平台不能为空。');
+        return;
+    }
+    if (!payload.username && !payload.email && !payload.phone) {
+        showToast('至少填写用户名、邮箱或手机号。');
+        return;
+    }
+
+    if (payload.id) {
+        await window.xbrowser.updateAccount(payload);
+        showToast('账号已更新。');
+    } else {
+        await window.xbrowser.createAccount(payload);
+        showToast('账号已保存。');
+    }
+
+    fillAccountForm();
+});
+
+homeProjectFilterSelect.addEventListener('change', (event) => {
+    homeProjectId = event.target.value || 'all';
+    renderProfileTable();
+});
+
+projectEditorIdSelect.addEventListener('change', () => {
+    if (!projectEditorIdSelect.value) {
+        projectNameInput.value = '';
+        projectColorInput.value = '#0f766e';
+        projectNotesInput.value = '';
+        deleteProjectBtn.disabled = true;
+        return;
+    }
+    fillProjectForm(getProjectById(projectEditorIdSelect.value) || getProjects()[0] || null);
+});
+
+saveProjectBtn.addEventListener('click', async () => {
+    const name = projectNameInput.value.trim();
+    if (!name) {
+        showToast('项目名称不能为空。');
+        return;
+    }
+
+    const payload = {
+        id: projectEditorIdSelect.value || undefined,
+        name,
+        color: projectColorInput.value,
+        notes: projectNotesInput.value.trim()
+    };
+    const project = payload.id
+        ? await window.xbrowser.updateProject(payload)
+        : await window.xbrowser.createProject(payload);
+    projectEditorIdSelect.dataset.pendingValue = project.id;
+    profileProjectIdSelect.dataset.pendingValue = project.id;
+    fillProjectForm(project);
+    profileProjectIdSelect.value = project.id;
+    showToast('项目已保存。');
+});
+
+deleteProjectBtn.addEventListener('click', async () => {
+    const project = getProjectById(projectEditorIdSelect.value);
+    if (!project || project.id === 'default') {
+        showToast('默认项目不能删除。');
+        return;
+    }
+    if (!window.confirm(`确定删除项目“${project.name}”吗？环境会回到默认项目。`)) return;
+
+    await window.xbrowser.deleteProject(project.id);
+    fillProjectForm(getProjects()[0] || null);
+    profileProjectIdSelect.value = 'default';
+    showToast('项目已删除。');
+});
+
+resetProjectBtn.addEventListener('click', () => {
+    projectEditorIdSelect.value = '';
+    projectNameInput.value = '';
+    projectColorInput.value = '#0f766e';
+    projectNotesInput.value = '';
+    deleteProjectBtn.disabled = true;
+});
+
+resetAccountBtn.addEventListener('click', () => {
+    fillAccountForm();
+});
+
+syncMasterProfileIdSelect.addEventListener('change', () => {
+    renderSyncPanel();
+});
+
+startSyncBtn.addEventListener('click', async () => {
+    const masterProfileId = syncMasterProfileIdSelect.value || '';
+    const slaveProfileIds = Array.from(syncSlaveProfileList.querySelectorAll('.sync-slave-checkbox:checked')).map((input) => input.value);
+    const eventTypes = Array.from(syncEventTypeList.querySelectorAll('.sync-event-type:checked')).map((input) => input.value);
+    const result = await window.xbrowser.startSyncSession({
+        masterProfileId,
+        slaveProfileIds,
+        eventTypes
+    });
+    appState.runtime.sync = result;
+    renderSyncPanel();
+    showToast(`同步器已启动，主窗口将同步到 ${result.slaveProfileIds.length} 个从窗口。`);
+});
+
+stopSyncBtn.addEventListener('click', async () => {
+    const result = await window.xbrowser.stopSyncSession();
+    appState.runtime.sync = result;
+    renderSyncPanel();
+    showToast('同步器已停止。');
+});
+
+selectAllProfilesInput.addEventListener('change', (event) => {
+    const visibleProfiles = getVisibleHomeProfiles();
+    if (event.target.checked) {
+        visibleProfiles.forEach((profile) => selectedProfileIds.add(profile.id));
+    } else {
+        visibleProfiles.forEach((profile) => selectedProfileIds.delete(profile.id));
+    }
+    renderProfileTable();
+});
+
+clearProfileSelectionBtn.addEventListener('click', () => {
+    selectedProfileIds.clear();
+    renderProfileTable();
+});
+
+batchMoveBtn.addEventListener('click', async () => {
+    const projectId = batchMoveProjectIdSelect.value || '';
+    if (!projectId) {
+        showToast('请先选择目标项目。');
+        return;
+    }
+    const profileIds = Array.from(selectedProfileIds);
+    if (!profileIds.length) {
+        showToast('请先选择环境。');
+        return;
+    }
+
+    const result = await window.xbrowser.moveProfilesToProject({ profileIds, projectId });
+    selectedProfileIds.clear();
+    batchMoveProjectIdSelect.value = '';
+    renderProfileTable();
+    showToast(`已移动 ${result.moved} 个环境。`);
+});
+
+batchBindProxyBtn.addEventListener('click', async () => {
+    const selectedProxyId = batchProxyIdSelect.value || '';
+    if (!selectedProxyId) {
+        showToast('请先选择要批量绑定的代理。');
+        return;
+    }
+
+    const profileIds = getSelectedActiveProfileIds();
+    if (!profileIds.length) {
+        showToast('请先选择环境。');
+        return;
+    }
+
+    const result = await window.xbrowser.batchAssignProxy({
+        profileIds,
+        proxyId: selectedProxyId === '__direct__' ? '' : selectedProxyId
+    });
+    selectedProfileIds.clear();
+    batchProxyIdSelect.value = '';
+    renderProfileTable();
+    showToast(result.proxyId ? `已为 ${result.updated} 个环境绑定代理。` : `已将 ${result.updated} 个环境切换为直连。`);
+});
+
+refreshProxyGeoBtn.addEventListener('click', async () => {
+    const result = await window.xbrowser.refreshProxyGeo({});
+    showToast(`已刷新 ${result.updated} 个代理的地区信息。`);
+});
+
+allocateProxyBtn.addEventListener('click', async () => {
+    const profileIds = getSelectedActiveProfileIds();
+    if (!profileIds.length) {
+        showToast('请先在首页选择环境。');
+        return;
+    }
+
+    const result = await window.xbrowser.allocateProxy({
+        profileIds,
+        mode: proxyAllocationModeSelect.value || 'manual',
+        countryCode: proxyCountryFilterSelect.value || '',
+        city: proxyCityFilterSelect.value || '',
+        maxLatency: proxyLatencyFilterSelect.value || ''
+    });
+    showToast(`已按 ${result.mode} 为 ${result.assigned} 个环境分配代理。`);
+});
+
+batchCreateBtn.addEventListener('click', async () => {
+    const payload = collectBatchCreatePayload();
+    if (payload.count < 2) {
+        showToast('批量创建数量至少为 2。');
+        return;
+    }
+
+    const result = await window.xbrowser.batchCreateProfiles(payload);
+    const proxyHint = result.proxyMode === 'round-robin'
+        ? '已按代理列表轮询分配。'
+        : (result.proxyMode === 'direct' ? '已按直连创建。' : '已沿用当前代理。');
+    setView('home');
+    showToast(`已批量创建 ${result.created} 个环境，${proxyHint}`);
+});
+
+templateSelect.addEventListener('change', () => {
+    const template = getTemplateById(templateSelect.value);
+    syncTemplateEditor(template);
+});
+
+applyTemplateBtn.addEventListener('click', () => {
+    const template = getTemplateById(templateSelect.value);
+    if (!template) {
+        showToast('请先选择模板。');
+        return;
+    }
+
+    fillProfileForm({
+        ...clone(template.profileDraft || {}),
+        id: '',
+        templateId: template.id
+    });
+    setView('create');
+    showToast('已套用模板，请确认环境名称后保存。');
+});
+
+saveTemplateBtn.addEventListener('click', async () => {
+    const name = templateNameInput.value.trim();
+    if (!name) {
+        showToast('模板名称不能为空。');
+        return;
+    }
+
+    const template = await window.xbrowser.saveTemplate({
+        id: document.getElementById('templateEditorId').value || undefined,
+        name,
+        notes: templateNotesInput.value.trim(),
+        profileDraft: collectProfileDraftPayload()
+    });
+    syncTemplateEditor(template);
+    showToast('模板已保存。');
+});
+
+deleteTemplateBtn.addEventListener('click', async () => {
+    const template = getTemplateById(templateSelect.value);
+    if (!template) {
+        showToast('请先选择模板。');
+        return;
+    }
+    if (!window.confirm(`确定删除模板“${template.name}”吗？`)) return;
+
+    await window.xbrowser.deleteTemplate(template.id);
+    if (document.getElementById('profileTemplateId').value === template.id) {
+        document.getElementById('profileTemplateId').value = '';
+    }
+    syncTemplateEditor(null);
+    showToast('模板已删除。');
+});
+
+resetTemplateBtn.addEventListener('click', () => {
+    syncTemplateEditor(null);
 });
 
 document.getElementById('manualProxyForm').addEventListener('submit', async (event) => {
@@ -995,6 +2251,22 @@ document.getElementById('importProxyFileBtn').addEventListener('click', async ()
     }
 });
 
+importExtensionBtn.addEventListener('click', async () => {
+    const result = await window.xbrowser.importUnpackedExtension();
+    if (!result?.canceled) {
+        showToast(`扩展已导入：${result.name}`);
+        setView('extensions');
+    }
+});
+
+importCrxExtensionBtn.addEventListener('click', async () => {
+    const result = await window.xbrowser.importCrxExtension();
+    if (!result?.canceled) {
+        showToast(`CRX 已导入：${result.name}`);
+        setView('extensions');
+    }
+});
+
 document.getElementById('openDataDirBtn').addEventListener('click', () => {
     window.xbrowser.openDataDir();
 });
@@ -1019,11 +2291,61 @@ document.querySelectorAll('.preset-url-btn').forEach((button) => {
 });
 
 document.getElementById('gotoCreateBtn').addEventListener('click', () => setView('create'));
+document.getElementById('importProfilesBtn').addEventListener('click', async () => {
+    const result = await window.xbrowser.importProfiles();
+    if (!result?.canceled) {
+        const templateHint = result.templates ? `，同时导入 ${result.templates} 个模板` : '';
+        showToast(`已导入 ${result.imported} 个环境${templateHint}。`);
+    }
+});
+document.getElementById('exportProfilesBtn').addEventListener('click', async () => {
+    const result = await window.xbrowser.exportProfiles({});
+    if (!result?.canceled) {
+        showToast(`已导出 ${result.exported} 个环境。`);
+    }
+});
 document.getElementById('refreshHomeBtn').addEventListener('click', () => renderAll());
 
 homeSearchInput.addEventListener('input', (event) => {
     homeSearch = event.target.value.trim().toLowerCase();
     renderProfileTable();
+});
+
+proxyCountryFilterSelect.addEventListener('change', (event) => {
+    proxyCountryFilter = String(event.target.value || '').trim().toUpperCase();
+    proxyCityFilter = '';
+    renderProxyFilters();
+    renderProxyTable();
+});
+
+proxyCityFilterSelect.addEventListener('change', (event) => {
+    proxyCityFilter = String(event.target.value || '').trim();
+    renderProxyTable();
+});
+
+proxyLatencyFilterSelect.addEventListener('change', (event) => {
+    proxyLatencyFilter = String(event.target.value || '').trim();
+    renderProxyTable();
+});
+
+proxyAllocationModeSelect.addEventListener('change', (event) => {
+    window.xbrowser.saveSettings({
+        proxyAllocation: {
+            mode: event.target.value || 'manual'
+        }
+    }).catch(() => {});
+});
+
+profileTableBody.addEventListener('change', (event) => {
+    const checkbox = event.target.closest('.profile-select');
+    if (!checkbox) return;
+
+    if (checkbox.checked) {
+        selectedProfileIds.add(checkbox.dataset.id);
+    } else {
+        selectedProfileIds.delete(checkbox.dataset.id);
+    }
+    syncProfileSelectionState();
 });
 
 document.querySelectorAll('.tab-chip').forEach((button) => {
