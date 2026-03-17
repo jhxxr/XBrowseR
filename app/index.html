@@ -381,15 +381,207 @@
                                     <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
                                     <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
                                 </div>
-                                <div class="grid two">
-                                    <label>
-                                        <span>界面语言 Language</span>
-                                        <input id="profileLanguage" type="text" placeholder="留空则跟随代理">
-                                    </label>
-                                    <label>
-                                        <span>时区 Timezone</span>
-                                        <input id="profileTimezone" type="text" placeholder="留空则跟随代理">
-                                    </label>
+                            </div>
+
+                            <div class="form-panel">
+                                <div class="form-section-title">基础设置</div>
+                                <div class="basic-settings-card">
+                                    <input id="profileLanguageMode" type="hidden" value="auto">
+                                    <input id="profileLanguage" type="hidden">
+                                    <input id="profileUiLanguageMode" type="hidden" value="auto">
+                                    <input id="profileUiLanguage" type="hidden">
+                                    <input id="profileTimezoneMode" type="hidden" value="auto">
+                                    <input id="profileTimezone" type="hidden">
+                                    <input id="profileGeoMode" type="hidden" value="auto">
+                                    <input id="profileGeoPermission" type="hidden" value="allow">
+                                    <input id="profileAudioEnabled" type="hidden" value="1">
+                                    <input id="profileImageEnabled" type="hidden" value="1">
+                                    <input id="profileVideoEnabled" type="hidden" value="1">
+                                    <input id="profileWindowSizeMode" type="hidden" value="custom">
+                                    <input id="profileWindowPosition" type="hidden" value="top-left">
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>语言</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-mode-field="profileLanguageMode">
+                                                <button type="button" class="segment-btn active" data-value="auto">基于 IP 匹配</button>
+                                                <button type="button" class="segment-btn" data-value="manual">自定义</button>
+                                            </div>
+                                            <div id="profileLanguageSelectWrap" class="smart-select hidden">
+                                                <button type="button" class="smart-select-trigger" data-select-trigger="profileLanguage">请选择语言</button>
+                                                <div class="smart-select-panel hidden" data-select-panel="profileLanguage">
+                                                    <div class="smart-select-search-wrap">
+                                                        <input type="text" class="smart-select-search" data-select-search="profileLanguage" placeholder="搜索语言">
+                                                    </div>
+                                                    <div class="smart-select-options" data-select-options="profileLanguage"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>界面语言</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-mode-field="profileUiLanguageMode">
+                                                <button type="button" class="segment-btn active" data-value="auto">基于 IP 匹配</button>
+                                                <button type="button" class="segment-btn" data-value="manual">自定义</button>
+                                            </div>
+                                            <div id="profileUiLanguageSelectWrap" class="smart-select hidden">
+                                                <button type="button" class="smart-select-trigger" data-select-trigger="profileUiLanguage">请选择界面语言</button>
+                                                <div class="smart-select-panel hidden" data-select-panel="profileUiLanguage">
+                                                    <div class="smart-select-search-wrap">
+                                                        <input type="text" class="smart-select-search" data-select-search="profileUiLanguage" placeholder="搜索界面语言">
+                                                    </div>
+                                                    <div class="smart-select-options" data-select-options="profileUiLanguage"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>时区</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-mode-field="profileTimezoneMode">
+                                                <button type="button" class="segment-btn active" data-value="auto">基于 IP 匹配</button>
+                                                <button type="button" class="segment-btn" data-value="manual">自定义</button>
+                                            </div>
+                                            <div id="profileTimezoneSelectWrap" class="smart-select hidden">
+                                                <button type="button" class="smart-select-trigger" data-select-trigger="profileTimezone">请选择时区</button>
+                                                <div class="smart-select-panel hidden" data-select-panel="profileTimezone">
+                                                    <div class="smart-select-search-wrap">
+                                                        <input type="text" class="smart-select-search" data-select-search="profileTimezone" placeholder="搜索时区">
+                                                    </div>
+                                                    <div class="smart-select-options" data-select-options="profileTimezone"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>地理位置提示</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-bool-field="profileGeoPermission" data-bool-kind="enum">
+                                                <button type="button" class="segment-btn" data-value="prompt">询问</button>
+                                                <button type="button" class="segment-btn active" data-value="allow">允许</button>
+                                                <button type="button" class="segment-btn" data-value="block">禁止</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>地理位置</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-mode-field="profileGeoMode">
+                                                <button type="button" class="segment-btn active" data-value="auto">基于 IP 匹配</button>
+                                                <button type="button" class="segment-btn" data-value="manual">自定义</button>
+                                            </div>
+                                            <div id="profileGeoManualFields" class="grid three compact hidden">
+                                                <label>
+                                                    <span>纬度</span>
+                                                    <input id="profileGeoLatitude" type="number" step="0.000001" placeholder="例如 40.712800">
+                                                </label>
+                                                <label>
+                                                    <span>经度</span>
+                                                    <input id="profileGeoLongitude" type="number" step="0.000001" placeholder="例如 -74.006000">
+                                                </label>
+                                                <label>
+                                                    <span>定位精度 (m)</span>
+                                                    <input id="profileGeoAccuracy" type="number" min="1" placeholder="30">
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>声音</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-bool-field="profileAudioEnabled">
+                                                <button type="button" class="segment-btn active" data-value="1">开启</button>
+                                                <button type="button" class="segment-btn" data-value="0">关闭</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>图片</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-bool-field="profileImageEnabled">
+                                                <button type="button" class="segment-btn active" data-value="1">开启</button>
+                                                <button type="button" class="segment-btn" data-value="0">关闭</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>视频</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-bool-field="profileVideoEnabled">
+                                                <button type="button" class="segment-btn active" data-value="1">开启</button>
+                                                <button type="button" class="segment-btn" data-value="0">关闭</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>窗口大小</span>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div class="segmented-toggle" data-mode-field="profileWindowSizeMode">
+                                                <button type="button" class="segment-btn active" data-value="custom">自定义</button>
+                                                <button type="button" class="segment-btn" data-value="fullscreen">全屏</button>
+                                            </div>
+                                            <div id="profileWindowSizeFields" class="grid two compact">
+                                                <label>
+                                                    <span>宽</span>
+                                                    <input id="profileWindowWidth" type="number" min="480" max="3840" placeholder="1000">
+                                                </label>
+                                                <label>
+                                                    <span>高</span>
+                                                    <input id="profileWindowHeight" type="number" min="480" max="2160" placeholder="1000">
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="basic-setting-row">
+                                        <div class="basic-setting-label">
+                                            <span>窗口位置</span>
+                                            <small>窗口打开时在屏幕中的初始位置</small>
+                                        </div>
+                                        <div class="basic-setting-controls">
+                                            <div id="profileWindowPositionPicker" class="window-position-picker">
+                                                <button type="button" class="window-position-cell active" data-position-value="top-left" aria-label="左上"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="top-center" aria-label="上中"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="top-right" aria-label="右上"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="center-left" aria-label="左中"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="center" aria-label="居中"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="center-right" aria-label="右中"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="bottom-left" aria-label="左下"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="bottom-center" aria-label="下中"></button>
+                                                <button type="button" class="window-position-cell" data-position-value="bottom-right" aria-label="右下"></button>
+                                                <div class="window-position-preview" aria-hidden="true">
+                                                    <span class="window-position-preview-dots"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -437,21 +629,13 @@
                                 <details class="advanced-card" style="margin-top: 12px;">
                                     <summary>更多高级指纹配置</summary>
                                     <div class="advanced-card-body">
-                                        <div class="grid four">
+                                        <div class="grid three">
                                             <label>
                                                 <span>WebRTC 模式</span>
                                                 <select id="profileWebrtcMode">
                                                     <option value="proxy">代理模式</option>
                                                     <option value="disabled">禁用</option>
                                                     <option value="real">原样暴露</option>
-                                                </select>
-                                            </label>
-                                            <label>
-                                                <span>地理位置模式</span>
-                                                <select id="profileGeoMode">
-                                                    <option value="auto">自动跟随代理</option>
-                                                    <option value="manual">手动坐标</option>
-                                                    <option value="block">阻止访问</option>
                                                 </select>
                                             </label>
                                             <label>
@@ -471,19 +655,7 @@
                                             </label>
                                         </div>
 
-                                        <div class="grid four">
-                                            <label>
-                                                <span>纬度</span>
-                                                <input id="profileGeoLatitude" type="number" step="0.000001" placeholder="Auto">
-                                            </label>
-                                            <label>
-                                                <span>经度</span>
-                                                <input id="profileGeoLongitude" type="number" step="0.000001" placeholder="Auto">
-                                            </label>
-                                            <label>
-                                                <span>定位精度 (m)</span>
-                                                <input id="profileGeoAccuracy" type="number" min="1" placeholder="30">
-                                            </label>
+                                        <div class="grid three">
                                             <label class="checkbox-row">
                                                 <span>启用 WebGPU</span>
                                                 <input id="profileWebgpuEnabled" type="checkbox" checked>

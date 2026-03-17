@@ -150,12 +150,23 @@ const providerModelsHint = document.getElementById('providerModelsHint');
 const agentFormatDocs = document.getElementById('agentFormatDocs');
 const agentToolTimeoutInput = document.getElementById('agentToolTimeoutMs');
 const agentMaxExecutionStepsInput = document.getElementById('agentMaxExecutionSteps');
+const profileWindowPositionPicker = document.getElementById('profileWindowPositionPicker');
+const profileBasicSegmentedGroups = Array.from(document.querySelectorAll('.segmented-toggle'));
+const profileSelectTriggers = Array.from(document.querySelectorAll('[data-select-trigger]'));
+const profileSelectSearchInputs = Array.from(document.querySelectorAll('.smart-select-search'));
+const profileWindowPositionCells = Array.from(document.querySelectorAll('.window-position-cell'));
 
 let homeFilter = 'all';
 let homeProjectId = 'all';
 let homeSearch = '';
 let currentFingerprintDraft = {};
 let agentDraftModels = [];
+let profileSearchableOptions = {
+    profileLanguage: [],
+    profileUiLanguage: [],
+    profileTimezone: []
+};
+let profileBasicSettingsMounted = false;
 const selectedProfileIds = new Set();
 let proxyCountryFilter = '';
 let proxyCityFilter = '';
@@ -175,6 +186,339 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+const PROFILE_LANGUAGE_CODES = [
+    'af', 'sq', 'am', 'ar', 'hy', 'az', 'eu', 'be', 'bn', 'bs', 'bg', 'ca', 'ceb', 'zh-CN', 'zh-HK', 'zh-TW',
+    'hr', 'cs', 'da', 'nl', 'en-US', 'en-GB', 'eo', 'et', 'fil', 'fi', 'fr', 'gl', 'ka', 'de', 'el', 'gu',
+    'ha', 'haw', 'he', 'hi', 'hu', 'is', 'id', 'ga', 'it', 'ja', 'jv', 'kn', 'kk', 'km', 'ko', 'ku', 'ky',
+    'lo', 'la', 'lv', 'lt', 'mk', 'ms', 'ml', 'mt', 'mr', 'mn', 'ne', 'no', 'fa', 'pl', 'pt-BR', 'pt-PT',
+    'pa', 'ro', 'ru', 'sr', 'si', 'sk', 'sl', 'so', 'es', 'sw', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur',
+    'uz', 'vi', 'cy', 'xh', 'yi', 'yo', 'zu'
+];
+
+const FALLBACK_TIMEZONES = [
+    'UTC', 'Africa/Cairo', 'Africa/Johannesburg', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+    'America/Mexico_City', 'America/New_York', 'America/Phoenix', 'America/Sao_Paulo', 'Asia/Bangkok',
+    'Asia/Dubai', 'Asia/Ho_Chi_Minh', 'Asia/Hong_Kong', 'Asia/Jakarta', 'Asia/Kolkata', 'Asia/Kuala_Lumpur',
+    'Asia/Seoul', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Melbourne', 'Australia/Sydney',
+    'Europe/Amsterdam', 'Europe/Berlin', 'Europe/Istanbul', 'Europe/Lisbon', 'Europe/London', 'Europe/Madrid',
+    'Europe/Moscow', 'Europe/Paris', 'Pacific/Auckland'
+];
+
+const PROFILE_SELECT_CONFIG = {
+    profileLanguage: {
+        modeFieldId: 'profileLanguageMode',
+        wrapperId: 'profileLanguageSelectWrap',
+        placeholder: '请选择语言',
+        optionType: 'language'
+    },
+    profileUiLanguage: {
+        modeFieldId: 'profileUiLanguageMode',
+        wrapperId: 'profileUiLanguageSelectWrap',
+        placeholder: '请选择界面语言',
+        optionType: 'language'
+    },
+    profileTimezone: {
+        modeFieldId: 'profileTimezoneMode',
+        wrapperId: 'profileTimezoneSelectWrap',
+        placeholder: '请选择时区',
+        optionType: 'timezone'
+    }
+};
+
+const WINDOW_POSITION_COORDINATES = {
+    'top-left': { left: '11%', top: '8%' },
+    'top-center': { left: '35%', top: '8%' },
+    'top-right': { left: '60%', top: '8%' },
+    'center-left': { left: '11%', top: '40%' },
+    center: { left: '35%', top: '40%' },
+    'center-right': { left: '60%', top: '40%' },
+    'bottom-left': { left: '11%', top: '71%' },
+    'bottom-center': { left: '35%', top: '71%' },
+    'bottom-right': { left: '60%', top: '71%' }
+};
+
+function safeDisplayName(displayNames, value) {
+    try {
+        return displayNames?.of(value) || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function normalizeSelectOptionLabel(value) {
+    return String(value || '')
+        .replace(/_/g, ' ')
+        .replace(/\//g, ' / ')
+        .trim();
+}
+
+function buildLanguageOptions() {
+    const zhDisplayNames = typeof Intl?.DisplayNames === 'function'
+        ? new Intl.DisplayNames(['zh-CN'], { type: 'language' })
+        : null;
+
+    return PROFILE_LANGUAGE_CODES.map((code) => {
+        const nativeDisplayNames = typeof Intl?.DisplayNames === 'function'
+            ? new Intl.DisplayNames([code], { type: 'language' })
+            : null;
+        const zhName = safeDisplayName(zhDisplayNames, code) || code;
+        const nativeName = safeDisplayName(nativeDisplayNames, code);
+        const label = nativeName && nativeName.toLowerCase() !== zhName.toLowerCase()
+            ? `${zhName} - ${nativeName}`
+            : zhName;
+        return {
+            value: code,
+            label,
+            searchText: `${code} ${label}`.toLowerCase()
+        };
+    }).sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'));
+}
+
+function buildTimezoneOptions() {
+    const values = typeof Intl?.supportedValuesOf === 'function'
+        ? Intl.supportedValuesOf('timeZone')
+        : FALLBACK_TIMEZONES;
+
+    return Array.from(new Set(values)).map((timezone) => ({
+        value: timezone,
+        label: normalizeSelectOptionLabel(timezone),
+        searchText: normalizeSelectOptionLabel(timezone).toLowerCase()
+    })).sort((left, right) => left.label.localeCompare(right.label, 'en'));
+}
+
+function initializeProfileSearchableOptions() {
+    profileSearchableOptions = {
+        profileLanguage: buildLanguageOptions(),
+        profileUiLanguage: buildLanguageOptions(),
+        profileTimezone: buildTimezoneOptions()
+    };
+}
+
+function getProfileModeValue(fieldId, fallback = 'auto') {
+    return document.getElementById(fieldId)?.value || fallback;
+}
+
+function setProfileModeValue(fieldId, value) {
+    const input = document.getElementById(fieldId);
+    if (input) {
+        input.value = value;
+    }
+}
+
+function getProfileHiddenBoolean(fieldId, defaultValue = true) {
+    const raw = String(document.getElementById(fieldId)?.value || '').trim();
+    if (!raw) return defaultValue;
+    return raw !== '0' && raw.toLowerCase() !== 'false';
+}
+
+function setProfileHiddenBoolean(fieldId, value) {
+    const input = document.getElementById(fieldId);
+    if (input) {
+        input.value = value ? '1' : '0';
+    }
+}
+
+function getSelectedProfileOption(fieldId) {
+    const value = String(document.getElementById(fieldId)?.value || '').trim();
+    const options = profileSearchableOptions[fieldId] || [];
+    return options.find((option) => option.value === value) || null;
+}
+
+function updateSearchableSelectTrigger(fieldId) {
+    const trigger = document.querySelector(`[data-select-trigger="${fieldId}"]`);
+    const config = PROFILE_SELECT_CONFIG[fieldId];
+    if (!trigger || !config) return;
+
+    const option = getSelectedProfileOption(fieldId);
+    trigger.textContent = option?.label || config.placeholder;
+    trigger.classList.toggle('is-placeholder', !option);
+}
+
+function renderSearchableSelectOptions(fieldId, query = '') {
+    const optionsWrap = document.querySelector(`[data-select-options="${fieldId}"]`);
+    if (!optionsWrap) return;
+
+    const normalizedQuery = String(query || '').trim().toLowerCase();
+    const currentValue = String(document.getElementById(fieldId)?.value || '').trim();
+    const options = (profileSearchableOptions[fieldId] || [])
+        .filter((option) => !normalizedQuery || option.searchText.includes(normalizedQuery));
+
+    if (!options.length) {
+        optionsWrap.innerHTML = '<div class="smart-select-empty">没有匹配项</div>';
+        return;
+    }
+
+    optionsWrap.innerHTML = options.map((option) => `
+        <button type="button" class="smart-select-option ${option.value === currentValue ? 'active' : ''}" data-select-option="${fieldId}" data-value="${escapeHtml(option.value)}">
+            ${escapeHtml(option.label)}
+        </button>
+    `).join('');
+}
+
+function closeAllSearchableSelects() {
+    Object.keys(PROFILE_SELECT_CONFIG).forEach((fieldId) => {
+        const wrap = document.getElementById(PROFILE_SELECT_CONFIG[fieldId].wrapperId);
+        const panel = document.querySelector(`[data-select-panel="${fieldId}"]`);
+        if (wrap) wrap.classList.remove('is-open');
+        if (panel) panel.classList.add('hidden');
+    });
+}
+
+function toggleSearchableSelect(fieldId, shouldOpen) {
+    const config = PROFILE_SELECT_CONFIG[fieldId];
+    if (!config) return;
+
+    const wrap = document.getElementById(config.wrapperId);
+    const panel = document.querySelector(`[data-select-panel="${fieldId}"]`);
+    const searchInput = document.querySelector(`[data-select-search="${fieldId}"]`);
+    if (!wrap || !panel) return;
+
+    closeAllSearchableSelects();
+
+    if (!shouldOpen) {
+        return;
+    }
+
+    wrap.classList.add('is-open');
+    panel.classList.remove('hidden');
+    if (searchInput) {
+        searchInput.value = '';
+        renderSearchableSelectOptions(fieldId, '');
+        requestAnimationFrame(() => searchInput.focus());
+    } else {
+        renderSearchableSelectOptions(fieldId, '');
+    }
+}
+
+function setSearchableSelectValue(fieldId, value, { close = true } = {}) {
+    const input = document.getElementById(fieldId);
+    if (!input) return;
+    input.value = String(value || '').trim();
+    updateSearchableSelectTrigger(fieldId);
+    renderSearchableSelectOptions(fieldId);
+    if (close) {
+        closeAllSearchableSelects();
+    }
+}
+
+function syncSegmentedToggleState() {
+    profileBasicSegmentedGroups.forEach((group) => {
+        const fieldId = group.dataset.modeField || group.dataset.boolField;
+        if (!fieldId) return;
+        const value = String(document.getElementById(fieldId)?.value || '').trim();
+        group.querySelectorAll('.segment-btn').forEach((button) => {
+            button.classList.toggle('active', String(button.dataset.value || '') === value);
+        });
+    });
+}
+
+function syncProfileWindowPositionPreview() {
+    const position = String(document.getElementById('profileWindowPosition')?.value || 'top-left').trim();
+    const picker = profileWindowPositionPicker;
+    const coordinates = WINDOW_POSITION_COORDINATES[position] || WINDOW_POSITION_COORDINATES['top-left'];
+    if (!picker) return;
+
+    picker.style.setProperty('--window-preview-left', coordinates.left);
+    picker.style.setProperty('--window-preview-top', coordinates.top);
+    profileWindowPositionCells.forEach((cell) => {
+        cell.classList.toggle('active', cell.dataset.positionValue === position);
+    });
+}
+
+function syncProfileBasicSettingsVisibility() {
+    Object.entries(PROFILE_SELECT_CONFIG).forEach(([fieldId, config]) => {
+        const wrap = document.getElementById(config.wrapperId);
+        const isManual = getProfileModeValue(config.modeFieldId) === 'manual';
+        if (wrap) {
+            wrap.classList.toggle('hidden', !isManual);
+        }
+        updateSearchableSelectTrigger(fieldId);
+        renderSearchableSelectOptions(fieldId);
+    });
+
+    document.getElementById('profileGeoManualFields')?.classList.toggle(
+        'hidden',
+        getProfileModeValue('profileGeoMode') !== 'manual'
+    );
+    document.getElementById('profileWindowSizeFields')?.classList.toggle(
+        'hidden',
+        getProfileModeValue('profileWindowSizeMode', 'custom') !== 'custom'
+    );
+
+    syncSegmentedToggleState();
+    syncProfileWindowPositionPreview();
+}
+
+function updateProfileDraftPreview() {
+    captureFingerprintDraftFromForm();
+    renderProfilePreview();
+}
+
+function bindProfileBasicSettings() {
+    if (profileBasicSettingsMounted) {
+        return;
+    }
+    profileBasicSettingsMounted = true;
+
+    profileBasicSegmentedGroups.forEach((group) => {
+        group.addEventListener('click', (event) => {
+            const button = event.target.closest('.segment-btn');
+            if (!button) return;
+            const fieldId = group.dataset.modeField || group.dataset.boolField;
+            if (!fieldId) return;
+            if (group.dataset.boolKind === 'enum') {
+                setProfileModeValue(fieldId, button.dataset.value || '');
+            } else if (group.dataset.boolField) {
+                setProfileHiddenBoolean(fieldId, button.dataset.value !== '0');
+            } else {
+                setProfileModeValue(fieldId, button.dataset.value || 'auto');
+            }
+            syncProfileBasicSettingsVisibility();
+            updateProfileDraftPreview();
+        });
+    });
+
+    profileSelectTriggers.forEach((trigger) => {
+        trigger.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const fieldId = trigger.dataset.selectTrigger;
+            const wrap = document.getElementById(PROFILE_SELECT_CONFIG[fieldId]?.wrapperId || '');
+            toggleSearchableSelect(fieldId, !(wrap && wrap.classList.contains('is-open')));
+        });
+    });
+
+    profileSelectSearchInputs.forEach((input) => {
+        input.addEventListener('input', () => {
+            renderSearchableSelectOptions(input.dataset.selectSearch, input.value);
+        });
+        input.addEventListener('click', (event) => event.stopPropagation());
+    });
+
+    Object.keys(PROFILE_SELECT_CONFIG).forEach((fieldId) => {
+        const optionsWrap = document.querySelector(`[data-select-options="${fieldId}"]`);
+        optionsWrap?.addEventListener('click', (event) => {
+            const option = event.target.closest('.smart-select-option');
+            if (!option) return;
+            setSearchableSelectValue(fieldId, option.dataset.value || '');
+            updateProfileDraftPreview();
+        });
+    });
+
+    profileWindowPositionCells.forEach((cell) => {
+        cell.addEventListener('click', () => {
+            setProfileModeValue('profileWindowPosition', cell.dataset.positionValue || 'top-left');
+            syncProfileWindowPositionPreview();
+            updateProfileDraftPreview();
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.smart-select')) {
+            closeAllSearchableSelects();
+        }
+    });
 }
 
 function isBuiltInStartUrl(url) {
@@ -672,21 +1016,31 @@ function getAgentBatchCounts(batch = getAgentBatchState()) {
 
 function renderProfilePreview() {
     const geolocation = currentFingerprintDraft.geolocation || {};
+    const media = currentFingerprintDraft.media || {};
+    const windowConfig = currentFingerprintDraft.window || {};
     const preview = {
         种子: currentFingerprintDraft.seed || '新建',
         设备预设: currentFingerprintDraft.presetId || '自动',
         UserAgent: document.getElementById('profileUserAgent').value || '自动',
         平台: document.getElementById('profilePlatform').value || 'Win32',
-        语言: document.getElementById('profileLanguage').value || '自动',
-        时区: document.getElementById('profileTimezone').value || '自动',
+        语言: currentFingerprintDraft.language || '自动',
+        界面语言: currentFingerprintDraft.uiLanguage || '自动',
+        时区: currentFingerprintDraft.timezone || '自动',
         CPU线程: document.getElementById('profileHardware').value || '自动',
         内存GB: document.getElementById('profileMemory').value || '自动',
         屏幕: `${document.getElementById('profileWidth').value || '?'} x ${document.getElementById('profileHeight').value || '?'}`,
+        窗口: windowConfig.sizeMode === 'fullscreen'
+            ? '全屏'
+            : `${windowConfig.width || '?'} x ${windowConfig.height || '?'} / ${windowConfig.position || 'top-left'}`,
         缩放比: currentFingerprintDraft.devicePixelRatio || '自动',
         WebRTC: document.getElementById('profileWebrtcMode').value || 'proxy',
         定位: geolocation.mode === 'manual'
             ? `${geolocation.latitude || 0}, ${geolocation.longitude || 0}`
             : (geolocation.mode || 'auto'),
+        定位权限: geolocation.permission || 'allow',
+        声音: media.audioEnabled === false ? '关闭' : '开启',
+        图片: media.imageEnabled === false ? '关闭' : '开启',
+        视频: media.videoEnabled === false ? '关闭' : '开启',
         字体数: Array.isArray(currentFingerprintDraft.fonts) ? currentFingerprintDraft.fonts.length : 0,
         WebGPU: currentFingerprintDraft.webgpu?.enabled !== false ? (currentFingerprintDraft.gpuTier || 'medium') : '关闭',
         DNT: currentFingerprintDraft.doNotTrack || '关闭',
@@ -733,13 +1087,28 @@ function formatSpeechVoices(voices = []) {
 }
 
 function captureFingerprintDraftFromForm() {
-    const language = document.getElementById('profileLanguage').value.trim() || 'auto';
+    const languageMode = getProfileModeValue('profileLanguageMode', 'auto');
+    const uiLanguageMode = getProfileModeValue('profileUiLanguageMode', 'auto');
+    const timezoneMode = getProfileModeValue('profileTimezoneMode', 'auto');
+    const language = languageMode === 'manual'
+        ? (document.getElementById('profileLanguage').value.trim() || 'auto')
+        : 'auto';
     const languages = language === 'auto'
         ? []
         : Array.from(new Set([language, language.split('-')[0]].filter(Boolean)));
-    const geolocationMode = document.getElementById('profileGeoMode').value || 'auto';
+    const uiLanguage = uiLanguageMode === 'manual'
+        ? (document.getElementById('profileUiLanguage').value.trim() || 'auto')
+        : 'auto';
+    const timezone = timezoneMode === 'manual'
+        ? (document.getElementById('profileTimezone').value.trim() || 'auto')
+        : 'auto';
+    const geolocationMode = getProfileModeValue('profileGeoMode', 'auto');
+    const geolocationPermission = getProfileModeValue('profileGeoPermission', 'allow');
     const fonts = parseStringListInput('profileFonts');
     const speechVoices = parseSpeechVoicesInput();
+    const windowSizeMode = getProfileModeValue('profileWindowSizeMode', 'custom');
+    const windowWidth = readOptionalNumber('profileWindowWidth');
+    const windowHeight = readOptionalNumber('profileWindowHeight');
 
     currentFingerprintDraft = {
         ...currentFingerprintDraft,
@@ -747,7 +1116,8 @@ function captureFingerprintDraftFromForm() {
         userAgent: document.getElementById('profileUserAgent').value.trim(),
         language,
         languages,
-        timezone: document.getElementById('profileTimezone').value.trim() || 'auto',
+        uiLanguage,
+        timezone,
         useProxyLocale: currentFingerprintDraft.useProxyLocale !== false,
         hardwareConcurrency: readOptionalNumber('profileHardware'),
         deviceMemory: readOptionalNumber('profileMemory'),
@@ -758,9 +1128,25 @@ function captureFingerprintDraftFromForm() {
         webrtcMode: document.getElementById('profileWebrtcMode').value || 'proxy',
         geolocation: {
             mode: geolocationMode,
+            permission: geolocationPermission,
             latitude: geolocationMode === 'manual' ? readOptionalNumber('profileGeoLatitude') : 0,
             longitude: geolocationMode === 'manual' ? readOptionalNumber('profileGeoLongitude') : 0,
             accuracy: readOptionalNumber('profileGeoAccuracy') || 30
+        },
+        media: {
+            audioEnabled: getProfileHiddenBoolean('profileAudioEnabled', true),
+            imageEnabled: getProfileHiddenBoolean('profileImageEnabled', true),
+            videoEnabled: getProfileHiddenBoolean('profileVideoEnabled', true)
+        },
+        window: {
+            sizeMode: windowSizeMode,
+            width: windowSizeMode === 'custom'
+                ? (windowWidth || readOptionalNumber('profileWidth') || currentFingerprintDraft.screen?.width || 1280)
+                : 0,
+            height: windowSizeMode === 'custom'
+                ? (windowHeight || readOptionalNumber('profileHeight') || currentFingerprintDraft.screen?.height || 900)
+                : 0,
+            position: getProfileModeValue('profileWindowPosition', 'top-left')
         },
         fonts,
         clientRectsNoise: readOptionalNumber('profileClientRectsNoise'),
@@ -779,21 +1165,29 @@ function applyFingerprintToForm(fingerprint = {}) {
 
     document.getElementById('profilePlatform').value = fingerprint.platform || 'Win32';
     document.getElementById('profileUserAgent').value = fingerprint.userAgent || '';
-    document.getElementById('profileLanguage').value = !fingerprint.language || fingerprint.language === 'auto'
-        ? ''
-        : fingerprint.language;
-    document.getElementById('profileTimezone').value = !fingerprint.timezone || fingerprint.timezone === 'auto'
-        ? ''
-        : fingerprint.timezone;
+    setProfileModeValue('profileLanguageMode', !fingerprint.language || fingerprint.language === 'auto' ? 'auto' : 'manual');
+    setSearchableSelectValue('profileLanguage', !fingerprint.language || fingerprint.language === 'auto' ? '' : fingerprint.language, { close: false });
+    setProfileModeValue('profileUiLanguageMode', !fingerprint.uiLanguage || fingerprint.uiLanguage === 'auto' ? 'auto' : 'manual');
+    setSearchableSelectValue('profileUiLanguage', !fingerprint.uiLanguage || fingerprint.uiLanguage === 'auto' ? '' : fingerprint.uiLanguage, { close: false });
+    setProfileModeValue('profileTimezoneMode', !fingerprint.timezone || fingerprint.timezone === 'auto' ? 'auto' : 'manual');
+    setSearchableSelectValue('profileTimezone', !fingerprint.timezone || fingerprint.timezone === 'auto' ? '' : fingerprint.timezone, { close: false });
     document.getElementById('profileHardware').value = fingerprint.hardwareConcurrency || '';
     document.getElementById('profileMemory').value = fingerprint.deviceMemory || '';
     document.getElementById('profileWidth').value = fingerprint.screen?.width || '';
     document.getElementById('profileHeight').value = fingerprint.screen?.height || '';
     document.getElementById('profileWebrtcMode').value = fingerprint.webrtcMode || 'proxy';
-    document.getElementById('profileGeoMode').value = fingerprint.geolocation?.mode || 'auto';
+    setProfileModeValue('profileGeoPermission', fingerprint.geolocation?.permission || (fingerprint.geolocation?.mode === 'block' ? 'block' : 'allow'));
+    setProfileModeValue('profileGeoMode', fingerprint.geolocation?.mode === 'block' ? 'auto' : (fingerprint.geolocation?.mode || 'auto'));
     document.getElementById('profileGeoLatitude').value = fingerprint.geolocation?.latitude || '';
     document.getElementById('profileGeoLongitude').value = fingerprint.geolocation?.longitude || '';
     document.getElementById('profileGeoAccuracy').value = fingerprint.geolocation?.accuracy || '';
+    setProfileHiddenBoolean('profileAudioEnabled', fingerprint.media?.audioEnabled !== false);
+    setProfileHiddenBoolean('profileImageEnabled', fingerprint.media?.imageEnabled !== false);
+    setProfileHiddenBoolean('profileVideoEnabled', fingerprint.media?.videoEnabled !== false);
+    setProfileModeValue('profileWindowSizeMode', fingerprint.window?.sizeMode === 'fullscreen' ? 'fullscreen' : 'custom');
+    document.getElementById('profileWindowWidth').value = fingerprint.window?.width || fingerprint.screen?.width || '';
+    document.getElementById('profileWindowHeight').value = fingerprint.window?.height || fingerprint.screen?.height || '';
+    setProfileModeValue('profileWindowPosition', fingerprint.window?.position || 'top-left');
     document.getElementById('profileFonts').value = Array.isArray(fingerprint.fonts) ? fingerprint.fonts.join('\n') : '';
     document.getElementById('profileClientRectsNoise').value = fingerprint.clientRectsNoise || '';
     document.getElementById('profileAudioContextNoise').value = fingerprint.audioContextNoise || fingerprint.audioNoise || '';
@@ -802,13 +1196,32 @@ function applyFingerprintToForm(fingerprint = {}) {
     document.getElementById('profileWebgpuEnabled').checked = fingerprint.webgpu?.enabled !== false;
     document.getElementById('profileDoNotTrack').value = fingerprint.doNotTrack || '';
 
+    syncProfileBasicSettingsVisibility();
+    captureFingerprintDraftFromForm();
     renderProfilePreview();
 }
 
 async function randomizeFingerprintFields(overrides = {}) {
+    captureFingerprintDraftFromForm();
     const platform = overrides.platform || document.getElementById('profilePlatform').value || 'Win32';
+    const preserved = {
+        language: currentFingerprintDraft.language,
+        uiLanguage: currentFingerprintDraft.uiLanguage,
+        timezone: currentFingerprintDraft.timezone,
+        geolocation: clone(currentFingerprintDraft.geolocation || {}),
+        media: clone(currentFingerprintDraft.media || {}),
+        window: clone(currentFingerprintDraft.window || {})
+    };
     const fingerprint = await window.xbrowser.generateFingerprint({ platform });
-    applyFingerprintToForm(fingerprint);
+    applyFingerprintToForm({
+        ...fingerprint,
+        language: preserved.language || fingerprint.language,
+        uiLanguage: preserved.uiLanguage || fingerprint.uiLanguage,
+        timezone: preserved.timezone || fingerprint.timezone,
+        geolocation: Object.keys(preserved.geolocation || {}).length ? preserved.geolocation : fingerprint.geolocation,
+        media: Object.keys(preserved.media || {}).length ? preserved.media : fingerprint.media,
+        window: Object.keys(preserved.window || {}).length ? preserved.window : fingerprint.window
+    });
 }
 
 function fillProfileForm(profile = null) {
@@ -1842,6 +2255,9 @@ async function boot() {
         appState.accounts = await window.xbrowser.listAccounts();
     }
     homeProjectId = appState.settings.ui?.homeProjectId || 'all';
+    initializeProfileSearchableOptions();
+    bindProfileBasicSettings();
+    syncProfileBasicSettingsVisibility();
     mountAgentSettingsFields();
     renderAll();
 
@@ -2366,6 +2782,9 @@ document.querySelectorAll('.tab-chip').forEach((button) => {
 });
 
 profileForm.addEventListener('input', () => {
+    if (document.activeElement?.classList?.contains('smart-select-search')) {
+        return;
+    }
     captureFingerprintDraftFromForm();
     renderProfilePreview();
 });

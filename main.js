@@ -4,7 +4,7 @@ const https = require('https');
 const fs = require('fs-extra');
 const { URL } = require('url');
 const { spawn, execFile } = require('child_process');
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
 const getPort = require('get-port');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const extractZip = require('extract-zip');
@@ -747,9 +747,11 @@ function fetchGeoInfo({ proxyPort = null } = {}) {
 async function resolveLaunchFingerprint(profile, proxyPort = null) {
     const next = JSON.parse(JSON.stringify(profile.fingerprint || {}));
     const needsLanguage = !next.language || next.language === 'auto';
+    const needsUiLanguage = !next.uiLanguage || next.uiLanguage === 'auto';
     const needsTimezone = !next.timezone || next.timezone === 'auto';
     const geoMode = String(next.geolocation?.mode || 'auto').trim() || 'auto';
-    const needsGeolocation = geoMode === 'auto' && (
+    const geoPermission = String(next.geolocation?.permission || (next.geolocation?.mode === 'block' ? 'block' : 'allow')).trim() || 'allow';
+    const needsGeolocation = geoPermission !== 'block' && geoMode === 'auto' && (
         !Number.isFinite(Number(next.geolocation?.latitude))
         || !Number.isFinite(Number(next.geolocation?.longitude))
         || !(Number(next.geolocation?.latitude) || Number(next.geolocation?.longitude))
@@ -770,15 +772,26 @@ async function resolveLaunchFingerprint(profile, proxyPort = null) {
 
         if (needsTimezone) next.timezone = geo.timezone;
         if (needsLanguage) next.language = geo.language;
+        if (needsUiLanguage) next.uiLanguage = geo.language;
         if (needsGeolocation && hasCoordinates) {
             next.geolocation = {
                 ...(next.geolocation || {}),
                 mode: 'auto',
+                permission: geoPermission,
                 latitude: Number(geo.latitude),
                 longitude: Number(geo.longitude),
                 accuracy: Math.max(1, Number(next.geolocation?.accuracy) || 30)
             };
         }
+    }
+
+    if (!next.uiLanguage || next.uiLanguage === 'auto') {
+        next.uiLanguage = next.language || geo?.language || 'en-US';
+    }
+    if (!next.geolocation || typeof next.geolocation !== 'object') {
+        next.geolocation = { mode: 'auto', permission: geoPermission, latitude: 0, longitude: 0, accuracy: 30 };
+    } else if (!next.geolocation.permission) {
+        next.geolocation.permission = geoPermission;
     }
 
     if (!Array.isArray(next.languages) || !next.languages.length || next.languages[0] === 'auto') {
@@ -790,6 +803,71 @@ async function resolveLaunchFingerprint(profile, proxyPort = null) {
     }
 
     return next;
+}
+
+function resolveWindowLaunchBounds(fingerprint = {}) {
+    const display = screen.getPrimaryDisplay?.();
+    const workArea = display?.workArea || {
+        x: 0,
+        y: 0,
+        width: Math.max(1280, Number(fingerprint.screen?.width) || 1280),
+        height: Math.max(900, Number(fingerprint.screen?.height) || 900)
+    };
+    const windowConfig = fingerprint.window && typeof fingerprint.window === 'object' ? fingerprint.window : {};
+    const sizeMode = windowConfig.sizeMode === 'fullscreen' ? 'fullscreen' : 'custom';
+    const width = Math.max(480, Math.min(Number(windowConfig.width) || Number(fingerprint.screen?.width) || 1280, workArea.width));
+    const height = Math.max(480, Math.min(Number(windowConfig.height) || Number(fingerprint.screen?.height) || 900, workArea.height));
+    const position = String(windowConfig.position || 'top-left').trim() || 'top-left';
+    const anchors = {
+        'top-left': { x: 0, y: 0 },
+        'top-center': { x: 0.5, y: 0 },
+        'top-right': { x: 1, y: 0 },
+        'center-left': { x: 0, y: 0.5 },
+        center: { x: 0.5, y: 0.5 },
+        'center-right': { x: 1, y: 0.5 },
+        'bottom-left': { x: 0, y: 1 },
+        'bottom-center': { x: 0.5, y: 1 },
+        'bottom-right': { x: 1, y: 1 }
+    };
+    const anchor = anchors[position] || anchors['top-left'];
+    const deltaX = Math.max(0, workArea.width - width);
+    const deltaY = Math.max(0, workArea.height - height);
+
+    return {
+        sizeMode,
+        width,
+        height,
+        x: Math.round(workArea.x + deltaX * anchor.x),
+        y: Math.round(workArea.y + deltaY * anchor.y)
+    };
+}
+
+async function ensureChromiumPreferences(userDataDir, fingerprint = {}) {
+    const profileDir = path.join(userDataDir, 'Default');
+    const preferencesPath = path.join(profileDir, 'Preferences');
+    await fs.ensureDir(profileDir);
+
+    let preferences = {};
+    if (await fs.pathExists(preferencesPath)) {
+        try {
+            preferences = await fs.readJson(preferencesPath);
+        } catch (error) {
+            preferences = {};
+        }
+    }
+
+    const languages = Array.isArray(fingerprint.languages) && fingerprint.languages.length
+        ? fingerprint.languages.filter(Boolean)
+        : [fingerprint.language || 'en-US'].filter(Boolean);
+    const acceptLanguages = languages.join(',');
+
+    preferences.intl = {
+        ...(preferences.intl || {}),
+        accept_languages: acceptLanguages,
+        selected_languages: acceptLanguages
+    };
+
+    await fs.writeJson(preferencesPath, preferences, { spaces: 2 });
 }
 
 function proxyRecordFromParsed(proxy, meta = {}) {
@@ -1642,8 +1720,12 @@ function buildBatchFingerprint(baseFingerprint = {}, randomizeFingerprint = true
     return createFingerprint({
         platform: source.platform,
         language: source.language,
+        uiLanguage: source.uiLanguage,
         timezone: source.timezone,
-        useProxyLocale: source.useProxyLocale !== false
+        useProxyLocale: source.useProxyLocale !== false,
+        geolocation: source.geolocation,
+        media: source.media,
+        window: source.window
     });
 }
 
@@ -2065,6 +2147,35 @@ async function waitForPageTarget(debugPort, timeoutMs = 15000) {
     throw new Error('浏览器调试页面未能及时就绪');
 }
 
+async function waitForBrowserDebuggerTarget(debugPort, timeoutMs = 15000) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+        const version = await requestJsonFromLocal(`http://127.0.0.1:${debugPort}/json/version`);
+        if (version?.webSocketDebuggerUrl) {
+            return version;
+        }
+        await sleep(180);
+    }
+
+    throw new Error('浏览器调试浏览器端点未能及时就绪');
+}
+
+function shouldInstrumentTarget(target = {}) {
+    const type = String(target?.type || '').trim();
+    const url = String(target?.url || '').trim();
+    if (type !== 'page') {
+        return false;
+    }
+    if (!url) {
+        return true;
+    }
+    if (url.startsWith('chrome-extension://') || url.startsWith('devtools://')) {
+        return false;
+    }
+    return true;
+}
+
 function buildUserAgentMetadata(fingerprint = {}) {
     const ua = String(fingerprint.userAgent || '');
     const chromeMatch = ua.match(/Chrome\/(\d+)\.(\d+)\.(\d+)\.(\d+)/i);
@@ -2128,7 +2239,7 @@ function createCdpSession(webSocketDebuggerUrl, timeoutMs = 5000) {
 
         socket.on('open', () => {
             finish(resolve, {
-                async send(method, params = {}, commandTimeoutMs = 5000) {
+                async send(method, params = {}, commandTimeoutMs = 5000, sessionId = '') {
                     return new Promise((resolveCommand, rejectCommand) => {
                         const id = ++nextCommandId;
                         const timer = setTimeout(() => {
@@ -2149,7 +2260,11 @@ function createCdpSession(webSocketDebuggerUrl, timeoutMs = 5000) {
                         });
 
                         try {
-                            socket.send(JSON.stringify({ id, method, params }));
+                            const payload = { id, method, params };
+                            if (sessionId) {
+                                payload.sessionId = sessionId;
+                            }
+                            socket.send(JSON.stringify(payload));
                         } catch (error) {
                             pending.delete(id);
                             clearTimeout(timer);
@@ -2197,7 +2312,7 @@ function createCdpSession(webSocketDebuggerUrl, timeoutMs = 5000) {
                 if (listeners?.size) {
                     listeners.forEach((listener) => {
                         try {
-                            listener(payload.params || {});
+                            listener(payload.params || {}, payload);
                         } catch (error) {
                         }
                     });
@@ -2647,40 +2762,43 @@ async function autoInjectAccountAssets(profileId) {
     };
 }
 
-async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUrl) {
-    const pageTarget = await waitForPageTarget(debugPort);
-    const session = await createCdpSession(pageTarget.webSocketDebuggerUrl);
-    const preloadScript = createPageScript(fingerprint);
+async function applyFingerprintToCdpTarget(session, fingerprint, {
+    sessionId = '',
+    preloadScript = '',
+    destinationUrl = '',
+    navigate = false
+} = {}) {
+    const scriptSource = preloadScript || createPageScript(fingerprint);
     const acceptLanguage = Array.isArray(fingerprint.languages) && fingerprint.languages.length
         ? fingerprint.languages.join(',')
         : (fingerprint.language || 'en-US');
 
     try {
-        await session.send('Page.enable');
-        await session.send('Runtime.enable');
-        await session.send('Network.enable');
+        await session.send('Page.enable', {}, 5000, sessionId);
+        await session.send('Runtime.enable', {}, 5000, sessionId);
+        await session.send('Network.enable', {}, 5000, sessionId);
         await session.send('Network.setUserAgentOverride', {
             userAgent: fingerprint.userAgent,
             acceptLanguage,
             platform: fingerprint.platform || 'Win32',
             userAgentMetadata: buildUserAgentMetadata(fingerprint)
-        });
+        }, 5000, sessionId);
 
         if (fingerprint.language) {
             await session.send('Emulation.setLocaleOverride', {
                 locale: fingerprint.language
-            });
+            }, 5000, sessionId);
         }
 
         if (fingerprint.timezone) {
             await session.send('Emulation.setTimezoneOverride', {
                 timezoneId: fingerprint.timezone
-            });
+            }, 5000, sessionId);
         }
 
-        if (fingerprint.geolocation?.mode === 'block') {
+        if (fingerprint.geolocation?.mode === 'block' || fingerprint.geolocation?.permission === 'block') {
             try {
-                await session.send('Emulation.clearGeolocationOverride');
+                await session.send('Emulation.clearGeolocationOverride', {}, 5000, sessionId);
             } catch (error) {
             }
         } else if (Number.isFinite(Number(fingerprint.geolocation?.latitude)) && Number.isFinite(Number(fingerprint.geolocation?.longitude))) {
@@ -2688,20 +2806,134 @@ async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUr
                 latitude: Number(fingerprint.geolocation.latitude),
                 longitude: Number(fingerprint.geolocation.longitude),
                 accuracy: Math.max(1, Number(fingerprint.geolocation.accuracy) || 30)
-            });
+            }, 5000, sessionId);
         }
 
         await session.send('Page.addScriptToEvaluateOnNewDocument', {
-            source: preloadScript
-        });
+            source: scriptSource
+        }, 5000, sessionId);
         await session.send('Runtime.evaluate', {
-            expression: preloadScript
+            expression: scriptSource
+        }, 5000, sessionId);
+
+        if (navigate && destinationUrl) {
+            await session.send('Page.navigate', {
+                url: destinationUrl
+            }, 5000, sessionId);
+        }
+    } catch (error) {
+        if (!/Target closed|Session with given id|No target with given id/i.test(String(error?.message || ''))) {
+            throw error;
+        }
+    }
+}
+
+async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUrl) {
+    const browserTarget = await waitForBrowserDebuggerTarget(debugPort);
+    const browserSession = await createCdpSession(browserTarget.webSocketDebuggerUrl);
+    const preloadScript = createPageScript(fingerprint);
+    const processedTargetIds = new Set();
+
+    const attachAndApply = async (targetId, targetInfo = {}, { navigate = false, navigationUrl = '' } = {}) => {
+        if (!targetId || processedTargetIds.has(targetId) || !shouldInstrumentTarget(targetInfo)) {
+            return null;
+        }
+
+        processedTargetIds.add(targetId);
+        try {
+            const attached = await browserSession.send('Target.attachToTarget', {
+                targetId,
+                flatten: true
+            });
+            const sessionId = String(attached?.sessionId || '').trim();
+            if (!sessionId) {
+                processedTargetIds.delete(targetId);
+                return null;
+            }
+
+            await applyFingerprintToCdpTarget(browserSession, fingerprint, {
+                sessionId,
+                preloadScript,
+                destinationUrl: navigationUrl,
+                navigate
+            });
+            return sessionId;
+        } catch (error) {
+            processedTargetIds.delete(targetId);
+            throw error;
+        }
+    };
+
+    const unsubscribeAttached = browserSession.on('Target.attachedToTarget', async (params) => {
+        const targetInfo = params?.targetInfo || {};
+        const targetId = String(targetInfo?.targetId || '').trim();
+        const targetSessionId = String(params?.sessionId || '').trim();
+        if (!targetId || processedTargetIds.has(targetId) || !shouldInstrumentTarget(targetInfo)) {
+            if (params?.waitingForDebugger && targetSessionId) {
+                try {
+                    await browserSession.send('Runtime.runIfWaitingForDebugger', {}, 5000, targetSessionId);
+                } catch (error) {
+                }
+            }
+            return;
+        }
+        try {
+            processedTargetIds.add(targetId);
+            await applyFingerprintToCdpTarget(browserSession, fingerprint, {
+                sessionId: targetSessionId,
+                preloadScript,
+                navigate: false
+            });
+        } catch (error) {
+            processedTargetIds.delete(targetId);
+        } finally {
+            if (params?.waitingForDebugger && targetSessionId) {
+                try {
+                    await browserSession.send('Runtime.runIfWaitingForDebugger', {}, 5000, targetSessionId);
+                } catch (error) {
+                }
+            }
+        }
+    });
+
+    try {
+        await browserSession.send('Target.setAutoAttach', {
+            autoAttach: true,
+            waitForDebuggerOnStart: true,
+            flatten: true
         });
-        await session.send('Page.navigate', {
-            url: destinationUrl
+
+        const pageTarget = await waitForPageTarget(debugPort);
+        const targetId = String(pageTarget?.id || pageTarget?.targetId || '').trim();
+        if (!targetId) {
+            throw new Error('未找到可附着的页面目标');
+        }
+
+        await attachAndApply(targetId, pageTarget, {
+            navigate: true,
+            navigationUrl: destinationUrl
         });
-    } finally {
-        session.close();
+
+        return {
+            session: browserSession,
+            close() {
+                try {
+                    unsubscribeAttached?.();
+                } catch (error) {
+                }
+                try {
+                    browserSession.close();
+                } catch (error) {
+                }
+            }
+        };
+    } catch (error) {
+        try {
+            unsubscribeAttached?.();
+        } catch (closeError) {
+        }
+        browserSession.close();
+        throw error;
     }
 }
 
@@ -2827,6 +3059,13 @@ async function stopProfile(profileId) {
 
     runningProfiles.delete(profileId);
 
+    if (runtime.browserCdpSession?.close) {
+        try {
+            runtime.browserCdpSession.close();
+        } catch (error) {
+        }
+    }
+
     if (runtime.logFd) {
         try { fs.closeSync(runtime.logFd); } catch (error) { }
     }
@@ -2943,6 +3182,7 @@ async function openProfile(profileId, { requestId = '' } = {}) {
         reportLaunchProgress(profile, requestId, linkedProxy ? 54 : 48, 'storage', '准备独立数据目录');
         const userDataDir = path.join(store.dataDir, 'profiles', profile.id);
         await fs.ensureDir(userDataDir);
+        await ensureChromiumPreferences(userDataDir, launchFingerprint);
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 68 : 62, 'extension', '生成指纹扩展');
         const extensionDir = await ensureFingerprintExtension(BASE_DIR, profile.id, launchFingerprint);
@@ -2952,11 +3192,16 @@ async function openProfile(profileId, { requestId = '' } = {}) {
         const extensionDirs = [extensionDir].concat(profileExtensions.map((extension) => extension.path));
         const startUrl = isBuiltInStartUrl(profile.startUrl) ? getDefaultStartPageUrl(profile.id) : profile.startUrl;
         debugPort = await getPort();
+        const launchWindow = resolveWindowLaunchBounds(launchFingerprint);
+        const uiLanguage = launchFingerprint.uiLanguage && launchFingerprint.uiLanguage !== 'auto'
+            ? launchFingerprint.uiLanguage
+            : (launchFingerprint.language || 'en-US');
         const runtime = {
             browserPid: null,
             browserBinary,
             extensionDir,
             extensionDirs,
+            browserCdpSession: null,
             corePid: coreRuntime?.process?.pid || null,
             logFd: coreRuntime?.logFd,
             port: mixedPort,
@@ -2971,8 +3216,7 @@ async function openProfile(profileId, { requestId = '' } = {}) {
 
         const launchArgs = [
             `--user-data-dir=${userDataDir}`,
-            `--window-size=${launchFingerprint.screen.width},${launchFingerprint.screen.height}`,
-            `--lang=${launchFingerprint.language || 'en-US'}`,
+            `--lang=${uiLanguage}`,
             `--user-agent=${launchFingerprint.userAgent}`,
             `--remote-debugging-port=${debugPort}`,
             '--no-first-run',
@@ -2982,6 +3226,20 @@ async function openProfile(profileId, { requestId = '' } = {}) {
             `--disable-extensions-except=${extensionDirs.join(',')}`,
             `--load-extension=${extensionDirs.join(',')}`,
         ];
+
+        if (launchWindow.sizeMode === 'fullscreen') {
+            launchArgs.push('--start-fullscreen');
+        } else {
+            launchArgs.push(`--window-size=${launchWindow.width},${launchWindow.height}`);
+            launchArgs.push(`--window-position=${launchWindow.x},${launchWindow.y}`);
+        }
+
+        if (launchFingerprint.media?.audioEnabled === false) {
+            launchArgs.push('--mute-audio');
+        }
+        if (launchFingerprint.media?.imageEnabled === false) {
+            launchArgs.push('--blink-settings=imagesEnabled=false');
+        }
 
         if (linkedProxy && mixedPort) {
             launchArgs.push(`--proxy-server=socks5://127.0.0.1:${mixedPort}`);
@@ -3008,7 +3266,7 @@ async function openProfile(profileId, { requestId = '' } = {}) {
         await waitForBrowserWindowReady(debugPort);
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 94 : 90, 'inject', '注入首屏指纹并跳转');
-        await primeInitialPageFingerprint(debugPort, launchFingerprint, startUrl);
+        runtime.browserCdpSession = await primeInitialPageFingerprint(debugPort, launchFingerprint, startUrl);
 
         const boundAccount = getPrimaryAccountForProfile(profile.id);
         if (boundAccount) {
@@ -3035,7 +3293,12 @@ async function openProfile(profileId, { requestId = '' } = {}) {
         profile.fingerprint = {
             ...profile.fingerprint,
             language: profile.fingerprint.language || 'auto',
-            timezone: profile.fingerprint.timezone || 'auto'
+            uiLanguage: profile.fingerprint.uiLanguage || 'auto',
+            timezone: profile.fingerprint.timezone || 'auto',
+            geolocation: {
+                ...(profile.fingerprint.geolocation || {}),
+                permission: profile.fingerprint.geolocation?.permission || 'allow'
+            }
         };
         await store.saveProfiles(profiles);
 
