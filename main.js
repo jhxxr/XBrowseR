@@ -1789,7 +1789,15 @@ function sanitizeExportFileName(name = '') {
     return normalized || 'xbrowser-profiles';
 }
 
-function buildProfileExportPackage(profileItems = []) {
+function cloneStructured(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function getProfileUserDataDir(profileId = '') {
+    return path.join(store.dataDir, 'profiles', profileId);
+}
+
+function collectRelatedTemplates(profileItems = []) {
     const relatedTemplates = [];
     const seenTemplateIds = new Set();
 
@@ -1802,33 +1810,241 @@ function buildProfileExportPackage(profileItems = []) {
             continue;
         }
         seenTemplateIds.add(template.id);
-        relatedTemplates.push(JSON.parse(JSON.stringify(template)));
+        relatedTemplates.push(template);
     }
+
+    return relatedTemplates;
+}
+
+function collectRelatedProjects(profileItems = []) {
+    const relatedProjects = [];
+    const seenProjectIds = new Set();
+
+    for (const profile of profileItems) {
+        const projectId = String(profile?.projectId || '').trim();
+        if (!projectId || projectId === DEFAULT_PROJECT_ID || seenProjectIds.has(projectId)) {
+            continue;
+        }
+        const project = getProject(projectId);
+        if (!project) {
+            continue;
+        }
+        seenProjectIds.add(project.id);
+        relatedProjects.push(project);
+    }
+
+    return relatedProjects;
+}
+
+function collectRelatedAccounts(profileItems = []) {
+    const profileIds = new Set(profileItems.map((profile) => String(profile?.id || '').trim()).filter(Boolean));
+    return accounts.filter((account) => profileIds.has(String(account?.profileId || '').trim()));
+}
+
+function collectRelatedExtensionIds(profileItems = [], templateItems = []) {
+    const extensionIds = new Set();
+
+    for (const profile of profileItems) {
+        for (const extensionId of Array.isArray(profile?.extensionIds) ? profile.extensionIds : []) {
+            const normalizedId = String(extensionId || '').trim();
+            if (normalizedId) {
+                extensionIds.add(normalizedId);
+            }
+        }
+    }
+
+    for (const template of templateItems) {
+        const draftExtensionIds = Array.isArray(template?.profileDraft?.extensionIds)
+            ? template.profileDraft.extensionIds
+            : [];
+        for (const extensionId of draftExtensionIds) {
+            const normalizedId = String(extensionId || '').trim();
+            if (normalizedId) {
+                extensionIds.add(normalizedId);
+            }
+        }
+    }
+
+    return Array.from(extensionIds);
+}
+
+function buildProfileExportRecord(profile = {}) {
+    const next = cloneStructured(profile);
+    next.proxyId = '';
+    return next;
+}
+
+function buildTemplateExportRecord(template = {}) {
+    const next = cloneStructured(template);
+    if (next.profileDraft && typeof next.profileDraft === 'object') {
+        next.profileDraft.proxyId = '';
+    }
+    return next;
+}
+
+function buildAccountExportRecord(account = {}) {
+    return cloneStructured(account);
+}
+
+function buildProjectExportRecord(project = {}) {
+    return cloneStructured(project);
+}
+
+function buildExtensionExportRecord(extension = {}) {
+    const next = cloneStructured(extension);
+    next.path = '';
+    next.archiveDir = String(extension.id || '').trim();
+    return next;
+}
+
+function buildProfileExportPackage(profileItems = [], options = {}) {
+    const relatedTemplates = collectRelatedTemplates(profileItems);
+    const relatedProjects = collectRelatedProjects(profileItems);
+    const relatedAccounts = collectRelatedAccounts(profileItems);
+    const relatedExtensionIds = collectRelatedExtensionIds(profileItems, relatedTemplates);
+    const relatedExtensions = relatedExtensionIds
+        .map((extensionId) => getExtension(extensionId))
+        .filter((extension) => extension && extension.path && fs.existsSync(extension.path));
 
     return {
         app: 'XBrowseR',
-        kind: 'profiles',
-        schemaVersion: 1,
+        kind: 'profiles-full',
+        schemaVersion: 2,
         exportedAt: Date.now(),
-        profiles: JSON.parse(JSON.stringify(profileItems)),
-        templates: relatedTemplates
+        exportOptions: {
+            includeProxy: false
+        },
+        runtime: {
+            openProfileIds: Array.isArray(options.openProfileIds)
+                ? options.openProfileIds.map((id) => String(id || '').trim()).filter(Boolean)
+                : []
+        },
+        profiles: profileItems.map((profile) => buildProfileExportRecord(profile)),
+        templates: relatedTemplates.map((template) => buildTemplateExportRecord(template)),
+        projects: relatedProjects.map((project) => buildProjectExportRecord(project)),
+        accounts: relatedAccounts.map((account) => buildAccountExportRecord(account)),
+        extensions: relatedExtensions.map((extension) => buildExtensionExportRecord(extension))
     };
+}
+
+function getUniqueImportedId(preferredId, exists) {
+    const normalizedPreferredId = String(preferredId || '').trim();
+    if (normalizedPreferredId && !exists(normalizedPreferredId)) {
+        return normalizedPreferredId;
+    }
+
+    let nextId = uuidv4();
+    while (exists(nextId)) {
+        nextId = uuidv4();
+    }
+    return nextId;
+}
+
+function escapePowerShellString(value = '') {
+    return String(value || '').replace(/'/g, "''");
+}
+
+function runPowerShell(command, timeoutMs = 120000) {
+    const encoded = Buffer.from(String(command || ''), 'utf16le').toString('base64');
+    return new Promise((resolve, reject) => {
+        execFile(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+            { timeout: timeoutMs, windowsHide: true },
+            (error, stdout, stderr) => {
+                if (error) {
+                    reject(new Error(String(stderr || stdout || error.message || 'PowerShell failed').trim()));
+                    return;
+                }
+                resolve({
+                    stdout: String(stdout || ''),
+                    stderr: String(stderr || '')
+                });
+            }
+        );
+    });
+}
+
+async function createZipArchiveFromDirectory(sourceDir, destinationPath) {
+    const command = [
+        "$ErrorActionPreference = 'Stop'",
+        `$source = '${escapePowerShellString(sourceDir)}'`,
+        `$destination = '${escapePowerShellString(destinationPath)}'`,
+        "if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Force }",
+        "$items = Get-ChildItem -LiteralPath $source -Force",
+        "if ($null -eq $items -or @($items).Count -eq 0) { throw 'Nothing to archive.' }",
+        "Compress-Archive -Path ($items | ForEach-Object { $_.FullName }) -DestinationPath $destination -Force"
+    ].join("`n");
+
+    await runPowerShell(command, 15 * 60 * 1000);
+}
+
+async function removeProfileTransientFiles(userDataDir) {
+    const targets = [
+        'SingletonCookie',
+        'SingletonLock',
+        'SingletonSocket',
+        'DevToolsActivePort'
+    ];
+
+    await Promise.all(targets.map(async (relativePath) => {
+        const targetPath = path.join(userDataDir, relativePath);
+        if (await fs.pathExists(targetPath)) {
+            await fs.remove(targetPath).catch(() => {});
+        }
+    }));
+}
+
+async function closeProfileForSnapshot(profileId) {
+    const runtime = runningProfiles.get(profileId);
+    if (!runtime) {
+        return false;
+    }
+
+    if (runtime.debugPort) {
+        try {
+            const browserTarget = await waitForBrowserDebuggerTarget(runtime.debugPort, 4000);
+            const browserSession = await createCdpSession(browserTarget.webSocketDebuggerUrl, 4000);
+            try {
+                await browserSession.send('Browser.close');
+            } finally {
+                browserSession.close();
+            }
+        } catch (error) {
+        }
+    }
+
+    const startedAt = Date.now();
+    while (runningProfiles.has(profileId) && Date.now() - startedAt < 8000) {
+        await sleep(200);
+    }
+
+    if (runningProfiles.has(profileId)) {
+        await stopProfile(profileId);
+    }
+
+    return true;
 }
 
 async function exportProfilesPackage(payload = {}) {
     const ids = Array.isArray(payload.ids) ? payload.ids.filter(Boolean) : [];
     const profileItems = ids.length
-        ? profiles.filter((profile) => ids.includes(profile.id))
+        ? profiles.filter((profile) => ids.includes(profile.id) && !profile.deletedAt)
         : profiles.filter((profile) => !profile.deletedAt);
 
     if (!profileItems.length) {
         throw new Error('没有可导出的环境');
     }
 
-    const packagePayload = buildProfileExportPackage(profileItems);
+    const runningProfileIds = profileItems
+        .map((profile) => profile.id)
+        .filter((profileId) => runningProfiles.has(profileId));
+    const packagePayload = buildProfileExportPackage(profileItems, {
+        openProfileIds: runningProfileIds
+    });
     const fileName = profileItems.length === 1
-        ? `${sanitizeExportFileName(profileItems[0].name || 'profile')}.json`
-        : `xbrowser-profiles-${new Date().toISOString().slice(0, 10)}.json`;
+        ? `${sanitizeExportFileName(profileItems[0].name || 'profile')}.zip`
+        : `xbrowser-profiles-${new Date().toISOString().slice(0, 10)}.zip`;
     const defaultPath = path.join(app.getPath('documents'), fileName);
     const { canceled, filePath } = await dialog.showSaveDialog({
         title: '导出环境',
@@ -1955,6 +2171,478 @@ async function importProfilesPackage() {
 
     if (!importedProfiles.length) {
         throw new Error('导入文件中没有可用的环境数据');
+    }
+
+    templates = normalizeTemplates([...importedTemplates, ...templates]);
+    profiles = normalizeProfilesWithCodes([...importedProfiles, ...profiles]);
+    await Promise.all([
+        store.saveTemplates(templates),
+        store.saveProfiles(profiles)
+    ]);
+    notifyState();
+
+    return {
+        canceled: false,
+        imported: importedProfiles.length,
+        templates: importedTemplates.length,
+        filePath
+    };
+}
+
+async function importProfilesArchivePackage(filePath) {
+    const extractDir = path.join(store.runtimeDir, `import-${Date.now()}-${uuidv4()}`);
+    try {
+        await fs.ensureDir(extractDir);
+        await extractZip(filePath, { dir: extractDir });
+
+        const manifestPath = path.join(extractDir, 'manifest.json');
+        if (!(await fs.pathExists(manifestPath))) {
+            throw new Error('Import package is missing manifest.json');
+        }
+
+        const payload = await fs.readJson(manifestPath);
+        if (!payload || payload.kind !== 'profiles-full') {
+            throw new Error('Unsupported profile package format');
+        }
+
+        const incomingProjects = Array.isArray(payload.projects) ? payload.projects : [];
+        const incomingTemplates = Array.isArray(payload.templates) ? payload.templates : [];
+        const incomingProfiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+        const incomingAccounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+        const incomingExtensions = Array.isArray(payload.extensions) ? payload.extensions : [];
+        if (!incomingProfiles.length) {
+            throw new Error('导入文件中没有可用的环境数据');
+        }
+
+        const importedProjects = [];
+        const projectIdMap = new Map();
+        for (const item of incomingProjects) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+            const sourceId = String(item.id || '').trim();
+            if (sourceId === DEFAULT_PROJECT_ID) {
+                projectIdMap.set(sourceId, DEFAULT_PROJECT_ID);
+                continue;
+            }
+            const next = normalizeProjectRecord({
+                ...cloneStructured(item),
+                id: getUniqueImportedId(sourceId, (id) => (
+                    settings.projects.some((project) => project.id === id)
+                    || importedProjects.some((project) => project.id === id)
+                ))
+            });
+            if (!next.name || next.id === DEFAULT_PROJECT_ID) {
+                continue;
+            }
+            importedProjects.push(next);
+            if (sourceId) {
+                projectIdMap.set(sourceId, next.id);
+            }
+        }
+
+        const currentExtensions = getExtensions();
+        const importedExtensions = [];
+        const extensionIdMap = new Map();
+        for (const item of incomingExtensions) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+            const sourceId = String(item.id || '').trim();
+            const archiveDir = String(item.archiveDir || sourceId || '').trim();
+            if (!archiveDir) {
+                continue;
+            }
+            const sourceDir = path.join(extractDir, 'extensions', archiveDir);
+            if (!(await fs.pathExists(sourceDir))) {
+                continue;
+            }
+            const nextId = getUniqueImportedId(sourceId, (id) => (
+                currentExtensions.some((extension) => extension.id === id)
+                || importedExtensions.some((extension) => extension.id === id)
+            ));
+            const targetDir = path.join(store.extensionsDir, nextId);
+            await fs.remove(targetDir).catch(() => {});
+            await fs.copy(sourceDir, targetDir, {
+                overwrite: true,
+                errorOnExist: false
+            });
+            const next = normalizeExtensionRecord({
+                ...cloneStructured(item),
+                id: nextId,
+                path: targetDir
+            });
+            if (!next.name || !next.path) {
+                await fs.remove(targetDir).catch(() => {});
+                continue;
+            }
+            importedExtensions.push(next);
+            if (sourceId) {
+                extensionIdMap.set(sourceId, next.id);
+            }
+        }
+
+        settings = ensureProjectSettings({
+            ...settings,
+            projects: normalizeProjects([...importedProjects, ...settings.projects]),
+            extensions: normalizeExtensions([...importedExtensions, ...currentExtensions])
+        });
+
+        const importedTemplates = [];
+        const templateIdMap = new Map();
+        for (const item of incomingTemplates) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+            const sourceId = String(item.id || '').trim();
+            const nextProfileDraft = cloneStructured(item.profileDraft || {});
+            nextProfileDraft.proxyId = '';
+            nextProfileDraft.projectId = nextProfileDraft.projectId
+                ? (projectIdMap.get(nextProfileDraft.projectId)
+                    || (settings.projects.some((project) => project.id === nextProfileDraft.projectId)
+                        ? nextProfileDraft.projectId
+                        : DEFAULT_PROJECT_ID))
+                : '';
+            nextProfileDraft.extensionIds = Array.isArray(nextProfileDraft.extensionIds)
+                ? nextProfileDraft.extensionIds
+                    .map((extensionId) => (
+                        extensionIdMap.get(extensionId)
+                        || (getExtension(extensionId) ? extensionId : '')
+                    ))
+                    .filter(Boolean)
+                : [];
+            const next = buildTemplate({
+                ...cloneStructured(item),
+                id: getUniqueImportedId(sourceId, (id) => (
+                    templates.some((template) => template.id === id)
+                    || importedTemplates.some((template) => template.id === id)
+                )),
+                profileDraft: nextProfileDraft
+            });
+            importedTemplates.push(next);
+            if (sourceId) {
+                templateIdMap.set(sourceId, next.id);
+            }
+        }
+
+        templates = normalizeTemplates([...importedTemplates, ...templates]);
+
+        const importedProfiles = [];
+        const profileIdMap = new Map();
+        const profileStoragePairs = [];
+        for (const item of incomingProfiles) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+            const sourceId = String(item.id || '').trim();
+            const nextId = getUniqueImportedId(sourceId, (id) => (
+                profiles.some((profile) => profile.id === id)
+                || importedProfiles.some((profile) => profile.id === id)
+            ));
+            const next = buildProfile({
+                id: nextId,
+                code: (
+                    profiles.some((profile) => profile.code === item.code)
+                    || importedProfiles.some((profile) => profile.code === item.code)
+                ) ? '' : item.code,
+                name: item.name,
+                startUrl: item.startUrl,
+                proxyId: '',
+                projectId: item.projectId
+                    ? (projectIdMap.get(item.projectId)
+                        || (settings.projects.some((project) => project.id === item.projectId)
+                            ? item.projectId
+                            : DEFAULT_PROJECT_ID))
+                    : DEFAULT_PROJECT_ID,
+                templateId: item.templateId
+                    ? (templateIdMap.get(item.templateId)
+                        || (templates.some((template) => template.id === item.templateId)
+                            ? item.templateId
+                            : ''))
+                    : '',
+                createdFrom: item.createdFrom || sourceId,
+                archivedAt: null,
+                tags: Array.isArray(item.tags) ? cloneStructured(item.tags) : (item.tags || ''),
+                notes: item.notes || '',
+                createdAt: item.createdAt,
+                fingerprint: cloneStructured(item.fingerprint || {}),
+                lastOpenedAt: item.lastOpenedAt || null,
+                extensionIds: Array.isArray(item.extensionIds)
+                    ? item.extensionIds
+                        .map((extensionId) => (
+                            extensionIdMap.get(extensionId)
+                            || (getExtension(extensionId) ? extensionId : '')
+                        ))
+                        .filter(Boolean)
+                    : []
+            });
+            importedProfiles.push(next);
+            if (sourceId) {
+                profileIdMap.set(sourceId, next.id);
+                profileStoragePairs.push({
+                    sourceId,
+                    targetId: next.id
+                });
+            }
+        }
+
+        if (!importedProfiles.length) {
+            throw new Error('导入文件中没有可用的环境数据');
+        }
+
+        for (const pair of profileStoragePairs) {
+            const sourceDir = path.join(extractDir, 'profiles', pair.sourceId);
+            const targetDir = getProfileUserDataDir(pair.targetId);
+            await fs.remove(targetDir).catch(() => {});
+            if (await fs.pathExists(sourceDir)) {
+                await fs.copy(sourceDir, targetDir, {
+                    overwrite: true,
+                    errorOnExist: false
+                });
+                await removeProfileTransientFiles(targetDir);
+            } else {
+                await fs.ensureDir(targetDir);
+            }
+        }
+
+        const importedAccounts = [];
+        for (const item of incomingAccounts) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+            const sourceId = String(item.id || '').trim();
+            const mappedProfileId = item.profileId ? (profileIdMap.get(item.profileId) || '') : '';
+            const next = normalizeAccountRecord({
+                ...cloneStructured(item),
+                id: getUniqueImportedId(sourceId, (id) => (
+                    accounts.some((account) => account.id === id)
+                    || importedAccounts.some((account) => account.id === id)
+                )),
+                profileId: mappedProfileId
+            });
+            if (!next.platform || (!next.username && !next.email && !next.phone)) {
+                continue;
+            }
+            if (next.profileId && !importedProfiles.some((profile) => profile.id === next.profileId) && !profiles.some((profile) => profile.id === next.profileId)) {
+                next.profileId = '';
+            }
+            importedAccounts.push(next);
+        }
+
+        profiles = normalizeProfilesWithCodes([...importedProfiles, ...profiles]);
+        accounts = sanitizeAccountBindings(normalizeAccounts([...importedAccounts, ...accounts]));
+        await Promise.all([
+            store.saveSettings(settings),
+            store.saveTemplates(templates),
+            store.saveProfiles(profiles),
+            accountStore.saveAccounts(accounts)
+        ]);
+        notifyState();
+
+        const mappedOpenProfileIds = Array.isArray(payload.runtime?.openProfileIds)
+            ? payload.runtime.openProfileIds
+                .map((profileId) => profileIdMap.get(String(profileId || '').trim()))
+                .filter(Boolean)
+            : [];
+        let reopened = 0;
+        for (const profileId of mappedOpenProfileIds) {
+            try {
+                await openProfile(profileId, {
+                    requestId: `import-open-${Date.now()}`,
+                    restoreSession: true,
+                    skipAccountAssets: true
+                });
+                reopened += 1;
+            } catch (error) {
+            }
+        }
+
+        return {
+            canceled: false,
+            imported: importedProfiles.length,
+            templates: importedTemplates.length,
+            accounts: importedAccounts.length,
+            extensions: importedExtensions.length,
+            reopened,
+            filePath
+        };
+    } finally {
+        await fs.remove(extractDir).catch(() => {});
+    }
+}
+
+async function exportProfilesPackage(payload = {}) {
+    const ids = Array.isArray(payload.ids) ? payload.ids.filter(Boolean) : [];
+    const profileItems = ids.length
+        ? profiles.filter((profile) => ids.includes(profile.id) && !profile.deletedAt)
+        : profiles.filter((profile) => !profile.deletedAt);
+
+    if (!profileItems.length) {
+        throw new Error('娌℃湁鍙鍑虹殑鐜');
+    }
+
+    const runningProfileIds = profileItems
+        .map((profile) => profile.id)
+        .filter((profileId) => runningProfiles.has(profileId));
+    const packagePayload = buildProfileExportPackage(profileItems, {
+        openProfileIds: runningProfileIds
+    });
+    const fileName = profileItems.length === 1
+        ? `${sanitizeExportFileName(profileItems[0].name || 'profile')}.zip`
+        : `xbrowser-profiles-${new Date().toISOString().slice(0, 10)}.zip`;
+    const defaultPath = path.join(app.getPath('documents'), fileName);
+    const { canceled, filePath } = await dialog.showSaveDialog({
+        title: '瀵煎嚭鐜',
+        defaultPath,
+        filters: [
+            { name: 'XBrowseR Package', extensions: ['zip'] }
+        ]
+    });
+
+    if (canceled || !filePath) {
+        return { canceled: true, exported: 0 };
+    }
+
+    const stagingDir = path.join(store.runtimeDir, `export-${Date.now()}-${uuidv4()}`);
+    const stagingProfilesDir = path.join(stagingDir, 'profiles');
+    const stagingExtensionsDir = path.join(stagingDir, 'extensions');
+    const reopenFailures = [];
+
+    try {
+        await fs.ensureDir(stagingProfilesDir);
+        await fs.ensureDir(stagingExtensionsDir);
+
+        for (const profileId of runningProfileIds) {
+            await closeProfileForSnapshot(profileId);
+        }
+
+        await fs.writeJson(path.join(stagingDir, 'manifest.json'), packagePayload, { spaces: 2 });
+
+        for (const profile of profileItems) {
+            const sourceDir = getProfileUserDataDir(profile.id);
+            const targetDir = path.join(stagingProfilesDir, profile.id);
+            if (await fs.pathExists(sourceDir)) {
+                await fs.copy(sourceDir, targetDir, {
+                    overwrite: true,
+                    errorOnExist: false
+                });
+                await removeProfileTransientFiles(targetDir);
+            } else {
+                await fs.ensureDir(targetDir);
+            }
+        }
+
+        for (const extension of packagePayload.extensions || []) {
+            const originalExtension = getExtension(extension.id);
+            if (!originalExtension?.path || !(await fs.pathExists(originalExtension.path))) {
+                continue;
+            }
+            await fs.copy(originalExtension.path, path.join(stagingExtensionsDir, extension.archiveDir), {
+                overwrite: true,
+                errorOnExist: false
+            });
+        }
+
+        await createZipArchiveFromDirectory(stagingDir, filePath);
+    } finally {
+        await fs.remove(stagingDir).catch(() => {});
+        for (const profileId of runningProfileIds) {
+            try {
+                await openProfile(profileId, {
+                    requestId: `export-reopen-${Date.now()}`,
+                    restoreSession: true,
+                    skipAccountAssets: true
+                });
+            } catch (error) {
+                reopenFailures.push({
+                    profileId,
+                    message: error?.message || 'reopen failed'
+                });
+            }
+        }
+    }
+
+    return {
+        canceled: false,
+        exported: profileItems.length,
+        filePath,
+        accounts: Array.isArray(packagePayload.accounts) ? packagePayload.accounts.length : 0,
+        extensions: Array.isArray(packagePayload.extensions) ? packagePayload.extensions.length : 0,
+        reopened: Math.max(0, runningProfileIds.length - reopenFailures.length),
+        reopenFailures
+    };
+}
+
+async function importProfilesPackage() {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+        title: '瀵煎叆鐜',
+        properties: ['openFile'],
+        filters: [
+            { name: 'XBrowseR Package', extensions: ['zip', 'json'] }
+        ]
+    });
+
+    if (canceled || !filePaths.length) {
+        return { canceled: true, imported: 0, templates: 0 };
+    }
+
+    const filePath = filePaths[0];
+    if (path.extname(filePath).toLowerCase() === '.zip') {
+        return importProfilesArchivePackage(filePath);
+    }
+
+    const payload = await fs.readJson(filePath);
+    const parsed = parseImportedProfilesPayload(payload);
+    if (!parsed.profiles.length) {
+        throw new Error('瀵煎叆鏂囦欢涓病鏈夊彲鐢ㄧ殑鐜鏁版嵁');
+    }
+
+    const templateIdMap = new Map();
+    const importedTemplates = [];
+    for (const item of parsed.templates) {
+        if (!item || typeof item !== 'object') {
+            continue;
+        }
+        const next = buildTemplate({
+            name: item.name,
+            notes: item.notes || '',
+            profileDraft: cloneStructured(item.profileDraft || {}),
+            createdAt: item.createdAt
+        });
+        importedTemplates.push(next);
+        if (item.id) {
+            templateIdMap.set(item.id, next.id);
+        }
+    }
+
+    const importedProfiles = [];
+    for (const item of parsed.profiles) {
+        if (!item || typeof item !== 'object') {
+            continue;
+        }
+
+        const mappedTemplateId = item.templateId
+            ? (templateIdMap.get(item.templateId) || (templates.some((template) => template.id === item.templateId) ? item.templateId : ''))
+            : '';
+
+        importedProfiles.push(buildProfile({
+            name: item.name,
+            startUrl: item.startUrl,
+            proxyId: '',
+            projectId: item.projectId || '',
+            templateId: mappedTemplateId,
+            createdFrom: item.createdFrom || item.id || '',
+            archivedAt: null,
+            tags: Array.isArray(item.tags) ? cloneStructured(item.tags) : (item.tags || ''),
+            notes: item.notes || '',
+            createdAt: item.createdAt,
+            fingerprint: cloneStructured(item.fingerprint || {}),
+            lastOpenedAt: null
+        }));
+    }
+
+    if (!importedProfiles.length) {
+        throw new Error('瀵煎叆鏂囦欢涓病鏈夊彲鐢ㄧ殑鐜鏁版嵁');
     }
 
     templates = normalizeTemplates([...importedTemplates, ...templates]);
@@ -2910,7 +3598,7 @@ async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUr
         }
 
         await attachAndApply(targetId, pageTarget, {
-            navigate: true,
+            navigate: !!destinationUrl,
             navigationUrl: destinationUrl
         });
 
@@ -3122,7 +3810,7 @@ async function clearProfileCache(profileId) {
     };
 }
 
-async function openProfile(profileId, { requestId = '' } = {}) {
+async function openProfile(profileId, { requestId = '', restoreSession = false, skipAccountAssets = false } = {}) {
     const profile = getProfile(profileId);
     if (!profile) throw new Error('环境不存在');
     if (profile.deletedAt) throw new Error('环境已在回收站，请先恢复后再启动');
@@ -3180,7 +3868,7 @@ async function openProfile(profileId, { requestId = '' } = {}) {
         const launchFingerprint = await resolveLaunchFingerprint(profile, mixedPort);
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 54 : 48, 'storage', '准备独立数据目录');
-        const userDataDir = path.join(store.dataDir, 'profiles', profile.id);
+        const userDataDir = getProfileUserDataDir(profile.id);
         await fs.ensureDir(userDataDir);
         await ensureChromiumPreferences(userDataDir, launchFingerprint);
 
@@ -3245,7 +3933,11 @@ async function openProfile(profileId, { requestId = '' } = {}) {
             launchArgs.push(`--proxy-server=socks5://127.0.0.1:${mixedPort}`);
         }
 
-        launchArgs.push('about:blank');
+        if (restoreSession) {
+            launchArgs.push('--restore-last-session');
+        } else {
+            launchArgs.push('about:blank');
+        }
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 80 : 76, 'spawn', '拉起浏览器进程');
         const browserProcess = spawn(browserBinary, launchArgs, {
@@ -3266,10 +3958,14 @@ async function openProfile(profileId, { requestId = '' } = {}) {
         await waitForBrowserWindowReady(debugPort);
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 94 : 90, 'inject', '注入首屏指纹并跳转');
-        runtime.browserCdpSession = await primeInitialPageFingerprint(debugPort, launchFingerprint, startUrl);
+        runtime.browserCdpSession = await primeInitialPageFingerprint(
+            debugPort,
+            launchFingerprint,
+            restoreSession ? '' : startUrl
+        );
 
         const boundAccount = getPrimaryAccountForProfile(profile.id);
-        if (boundAccount) {
+        if (boundAccount && !skipAccountAssets) {
             reportLaunchProgress(profile, requestId, 96, 'account-assets', '同步已绑定账号数据');
             try {
                 const injection = await autoInjectAccountAssets(profile.id);
