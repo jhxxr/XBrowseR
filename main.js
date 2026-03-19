@@ -22,6 +22,7 @@ const { parseProxyLink, parseSubscriptionContent, startCore, waitForMihomoReady,
 const { ensureBundledMihomo, MIHOMO_VERSION } = require('./lib/mihomo-download');
 const { ensureFingerprintExtension, createPageScript } = require('./lib/chrome-extension');
 const { PROVIDER_FORMATS, buildProviderRecord, ensureAgentSettings, fetchModelsForProvider } = require('./lib/llm-provider');
+const { createUpdaterController, createEmptyUpdaterState } = require('./lib/updater');
 
 const BASE_DIR = __dirname;
 const DATA_ROOT_DIR = app.isPackaged ? path.dirname(process.execPath) : BASE_DIR;
@@ -73,6 +74,7 @@ let internalServerPort = 0;
 const runningProfiles = new Map();
 let agentController = null;
 let syncController = null;
+let updaterController = null;
 
 function getDefaultProjectRecord() {
     return {
@@ -3856,6 +3858,7 @@ function buildState() {
             })),
             agent: agentController ? agentController.getPublicState() : createEmptyAgentRuntimeState(),
             sync: syncController ? syncController.getState() : createEmptySyncState(),
+            updater: updaterController ? updaterController.getState() : createEmptyUpdaterState(),
             activeProvider: activeProvider ? {
                 id: activeProvider.id,
                 name: activeProvider.name,
@@ -4531,8 +4534,23 @@ app.whenReady().then(async () => {
     await startInternalServer();
     createMainWindow();
     await restartApiServer();
+    updaterController = createUpdaterController({ onStateChanged: notifyState });
+    await updaterController.initialize();
 
     ipcMain.handle('app:bootstrap', async () => buildState());
+    ipcMain.handle('app:update:check', async () => {
+        if (!updaterController) {
+            return createEmptyUpdaterState();
+        }
+        await updaterController.checkForUpdates();
+        return updaterController.getState();
+    });
+    ipcMain.handle('app:update:install', async () => {
+        if (!updaterController) {
+            return false;
+        }
+        return updaterController.installUpdate();
+    });
     ipcMain.handle('agent:window:open', async () => {
         openAgentWindow();
         return true;

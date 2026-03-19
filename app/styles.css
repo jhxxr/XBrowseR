@@ -190,6 +190,12 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
     margin-bottom: 32px;
 }
 
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .eyebrow,
 .panel-kicker {
     font-size: 12px;
@@ -223,6 +229,36 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.topbar-update-btn {
+    min-width: 168px;
+    padding: 10px 16px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.topbar-update-btn[hidden] {
+    display: none;
+}
+
+.topbar-update-btn.is-loading {
+    color: #bfdbfe;
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(96, 165, 250, 0.22);
+}
+
+.topbar-update-btn.is-ready {
+    color: #ecfeff;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.26), rgba(16, 185, 129, 0.22));
+    border-color: rgba(34, 211, 238, 0.3);
+    box-shadow: 0 10px 30px rgba(14, 165, 233, 0.15);
+}
+
+.topbar-update-btn.is-ready:hover {
+    transform: translateY(-1px);
+    border-color: rgba(103, 232, 249, 0.45);
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.34), rgba(16, 185, 129, 0.28));
 }
 
 /* Views */
@@ -1617,6 +1653,15 @@ pre {
 }
 
 @media (max-width: 900px) {
+    .topbar,
+    .topbar-actions {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .topbar-update-btn {
+        width: 100%;
+        justify-content: center;
+    }
     .proxy-layout, .api-grid { grid-template-columns: 1fr; }
     .summary-strip { grid-template-columns: 1fr; }
     

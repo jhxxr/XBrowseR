@@ -5,6 +5,10 @@
   "main": "main.js",
   "author": "OpenAI Codex",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jhxxr/XBrowseR.git"
+  },
   "scripts": {
     "start": "electron .",
     "ensure:browser": "node scripts/ensure-browser.js",
@@ -15,6 +19,7 @@
     "pack": "npm run ensure:assets && electron-builder --dir --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "extract-zip": "^2.0.1",
     "fs-extra": "^11.3.2",
     "get-port": "^5.1.1",
@@ -55,6 +60,15 @@
     "directories": {
       "output": "dist"
     },
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jhxxr",
+        "repo": "XBrowseR"
+      }
+    ],
+    "electronUpdaterCompatibility": ">=2.16",
     "win": {
       "target": [
         "nsis"

@@ -59,6 +59,28 @@ function createEmptySyncRuntimeState() {
     };
 }
 
+function createEmptyUpdaterState() {
+    return {
+        supported: false,
+        enabled: false,
+        status: 'idle',
+        currentVersion: '',
+        availableVersion: '',
+        downloadedVersion: '',
+        releaseName: '',
+        releaseDate: '',
+        progress: 0,
+        bytesPerSecond: 0,
+        transferred: 0,
+        total: 0,
+        checkedAt: 0,
+        downloadedAt: 0,
+        canRestartToUpdate: false,
+        message: '',
+        error: ''
+    };
+}
+
 let appState = {
     profiles: [],
     templates: [],
@@ -75,7 +97,8 @@ let appState = {
         running: [],
         providerFormats: [],
         agent: createEmptyAgentRuntimeState(),
-        sync: createEmptySyncRuntimeState()
+        sync: createEmptySyncRuntimeState(),
+        updater: createEmptyUpdaterState()
     }
 };
 
@@ -140,6 +163,7 @@ const syncSlaveTableBody = document.getElementById('syncSlaveTableBody');
 const syncEventLog = document.getElementById('syncEventLog');
 const startSyncBtn = document.getElementById('startSyncBtn');
 const stopSyncBtn = document.getElementById('stopSyncBtn');
+const updateActionBtn = document.getElementById('updateActionBtn');
 
 const agentProviderForm = document.getElementById('agentProviderForm');
 const agentProviderList = document.getElementById('agentProviderList');
@@ -178,6 +202,7 @@ const selectedProfileIds = new Set();
 let proxyCountryFilter = '';
 let proxyCityFilter = '';
 let proxyLatencyFilter = '';
+let lastUpdaterToastKey = '';
 
 const launchProgressByProfileId = new Map();
 const launchCleanupTimers = new Map();
@@ -802,6 +827,54 @@ function renderStats() {
         : (appState.runtime.apiUrl ? `API ${appState.runtime.apiUrl}` : 'API 未启用');
 }
 
+function renderUpdaterAction() {
+    if (!updateActionBtn) {
+        return;
+    }
+
+    const updater = getUpdaterState();
+    updateActionBtn.hidden = true;
+    updateActionBtn.disabled = true;
+    updateActionBtn.textContent = '';
+    updateActionBtn.title = '';
+    updateActionBtn.classList.remove('is-loading', 'is-ready');
+
+    if (!updater.supported || !updater.enabled) {
+        return;
+    }
+
+    if (updater.status === 'checking') {
+        updateActionBtn.hidden = false;
+        updateActionBtn.classList.add('is-loading');
+        updateActionBtn.textContent = '后台检查更新';
+        return;
+    }
+
+    if (updater.status === 'available' || updater.status === 'downloading') {
+        const versionLabel = updater.availableVersion ? `v${updater.availableVersion}` : '新版本';
+        const progress = Math.max(1, Math.round(Number(updater.progress) || 0));
+        updateActionBtn.hidden = false;
+        updateActionBtn.classList.add('is-loading');
+        updateActionBtn.textContent = updater.status === 'available'
+            ? `${versionLabel} 后台下载中`
+            : `${versionLabel} 下载 ${progress}%`;
+        return;
+    }
+
+    if (updater.status === 'downloaded' || updater.status === 'installing') {
+        const versionLabel = updater.downloadedVersion ? ` v${updater.downloadedVersion}` : '';
+        updateActionBtn.hidden = false;
+        updateActionBtn.classList.add(updater.status === 'downloaded' ? 'is-ready' : 'is-loading');
+        updateActionBtn.disabled = updater.status !== 'downloaded';
+        updateActionBtn.textContent = updater.status === 'downloaded'
+            ? `立即重启更新${versionLabel}`
+            : '正在安装更新';
+        updateActionBtn.title = updater.status === 'downloaded'
+            ? '也可以直接关闭应用，退出时会自动安装'
+            : '';
+    }
+}
+
 function renderProjectOptions() {
     const projects = getProjects();
     const projectOptions = projects.map((project) => (
@@ -988,6 +1061,10 @@ function renderProxyFilters() {
 
 function getAgentRuntime() {
     return appState.runtime.agent || createEmptyAgentRuntimeState();
+}
+
+function getUpdaterState() {
+    return appState.runtime.updater || createEmptyUpdaterState();
 }
 
 function getAgentBatchState(runtimeAgent = getAgentRuntime()) {
@@ -2085,6 +2162,7 @@ function renderSyncPanel() {
 
 function renderAll() {
     renderStats();
+    renderUpdaterAction();
     renderProjectOptions();
     renderAccountProfileOptions();
     renderProfileExtensionOptions();
@@ -2831,6 +2909,15 @@ document.getElementById('openDataDirBtn').addEventListener('click', () => {
     window.xbrowser.openDataDir();
 });
 
+updateActionBtn?.addEventListener('click', async () => {
+    const updater = getUpdaterState();
+    if (updater.status !== 'downloaded' || !updater.canRestartToUpdate) {
+        return;
+    }
+    showToast('正在重启并安装更新。');
+    await window.xbrowser.installUpdate();
+});
+
 document.getElementById('resetFormBtn').addEventListener('click', async () => {
     fillProfileForm();
     await randomizeFingerprintFields();
@@ -2973,7 +3060,16 @@ document.body.addEventListener('click', (event) => {
 });
 
 window.xbrowser.onStateUpdated((state) => {
+    const previousUpdater = getUpdaterState();
     appState = state;
+
+    const nextUpdater = getUpdaterState();
+    const downloadToastKey = `downloaded:${nextUpdater.downloadedVersion || ''}`;
+    if (nextUpdater.status === 'downloaded' && previousUpdater.status !== 'downloaded' && lastUpdaterToastKey !== downloadToastKey) {
+        lastUpdaterToastKey = downloadToastKey;
+        showToast(`新版本 ${nextUpdater.downloadedVersion ? `v${nextUpdater.downloadedVersion} ` : ''}已下载，退出应用时会自动安装。`);
+    }
+
     renderAll();
 });
 
