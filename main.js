@@ -34,6 +34,32 @@ const accountStore = createAccountStore(DATA_ROOT_DIR);
 const PROFILE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DEFAULT_PROJECT_ID = 'default';
 const DEFAULT_PROJECT_COLOR = '#0f766e';
+const SEARCH_ENGINE_PRESETS = {
+    google: {
+        keyword: 'google.com',
+        name: 'Google',
+        searchUrl: 'https://www.google.com/search?q={searchTerms}',
+        faviconUrl: 'https://www.google.com/favicon.ico'
+    },
+    bing: {
+        keyword: 'bing.com',
+        name: 'Bing',
+        searchUrl: 'https://www.bing.com/search?q={searchTerms}',
+        faviconUrl: 'https://www.bing.com/sa/simg/favicon-trans-bg-blue-mg.ico'
+    },
+    duckduckgo: {
+        keyword: 'duckduckgo.com',
+        name: 'DuckDuckGo',
+        searchUrl: 'https://duckduckgo.com/?q={searchTerms}',
+        faviconUrl: 'https://duckduckgo.com/favicon.ico'
+    },
+    baidu: {
+        keyword: 'baidu.com',
+        name: 'Baidu',
+        searchUrl: 'https://www.baidu.com/s?wd={searchTerms}',
+        faviconUrl: 'https://www.baidu.com/favicon.ico'
+    }
+};
 
 let profiles = [];
 let templates = [];
@@ -842,6 +868,25 @@ function resolveWindowLaunchBounds(fingerprint = {}) {
     };
 }
 
+function getFingerprintStartupPreferences(fingerprint = {}) {
+    const source = fingerprint?.preferences && typeof fingerprint.preferences === 'object'
+        ? fingerprint.preferences
+        : {};
+    return {
+        restoreLastSession: source.restoreLastSession === true,
+        autoInjectAccountAssets: source.autoInjectAccountAssets !== false,
+        clearCacheBeforeLaunch: source.clearCacheBeforeLaunch === true,
+        clearCookiesBeforeLaunch: source.clearCookiesBeforeLaunch === true,
+        clearLocalStorageBeforeLaunch: source.clearLocalStorageBeforeLaunch === true,
+        openDevtoolsOnLaunch: source.openDevtoolsOnLaunch === true,
+        disableNotifications: source.disableNotifications === true
+    };
+}
+
+function getSearchEnginePreference(searchEngine) {
+    return SEARCH_ENGINE_PRESETS[String(searchEngine || '').trim()] || SEARCH_ENGINE_PRESETS.google;
+}
+
 async function ensureChromiumPreferences(userDataDir, fingerprint = {}) {
     const profileDir = path.join(userDataDir, 'Default');
     const preferencesPath = path.join(profileDir, 'Preferences');
@@ -860,11 +905,57 @@ async function ensureChromiumPreferences(userDataDir, fingerprint = {}) {
         ? fingerprint.languages.filter(Boolean)
         : [fingerprint.language || 'en-US'].filter(Boolean);
     const acceptLanguages = languages.join(',');
+    const startupPreferences = getFingerprintStartupPreferences(fingerprint);
+    const searchEngine = getSearchEnginePreference(fingerprint.searchEngine);
 
     preferences.intl = {
         ...(preferences.intl || {}),
         accept_languages: acceptLanguages,
         selected_languages: acceptLanguages
+    };
+
+    preferences.profile = {
+        ...(preferences.profile || {}),
+        default_content_setting_values: {
+            ...(preferences.profile?.default_content_setting_values || {}),
+            notifications: startupPreferences.disableNotifications ? 2 : (preferences.profile?.default_content_setting_values?.notifications || 1)
+        }
+    };
+
+    preferences.default_search_provider = {
+        ...(preferences.default_search_provider || {}),
+        enabled: true,
+        keyword: searchEngine.keyword,
+        name: searchEngine.name,
+        search_url: searchEngine.searchUrl
+    };
+
+    preferences.default_search_provider_data = {
+        template_url_data: {
+            alternate_urls: [],
+            created_by_policy: false,
+            favicon_url: searchEngine.faviconUrl,
+            id: 1,
+            image_search_post_params: '',
+            image_search_url: '',
+            image_translate_source_language_param_key: '',
+            image_translate_target_language_param_key: '',
+            input_encodings: ['UTF-8'],
+            instant_url: '',
+            keyword: searchEngine.keyword,
+            last_modified: '0',
+            last_visited: '0',
+            new_tab_url: '',
+            originating_url: '',
+            preconnect_to_search_url: '',
+            safe_for_autoreplace: false,
+            search_terms_replacement_key: 'searchTerms',
+            short_name: searchEngine.name,
+            suggestions_url: '',
+            suggestions_url_post_params: '',
+            synced_guid: '',
+            url: searchEngine.searchUrl
+        }
     };
 
     await fs.writeJson(preferencesPath, preferences, { spaces: 2 });
@@ -1725,7 +1816,11 @@ function buildBatchFingerprint(baseFingerprint = {}, randomizeFingerprint = true
         useProxyLocale: source.useProxyLocale !== false,
         geolocation: source.geolocation,
         media: source.media,
-        window: source.window
+        window: source.window,
+        searchEngine: source.searchEngine,
+        startupUrls: source.startupUrls,
+        storagePreset: source.storagePreset,
+        preferences: source.preferences
     });
 }
 
@@ -3450,6 +3545,47 @@ async function autoInjectAccountAssets(profileId) {
     };
 }
 
+async function autoInjectProfileStoragePreset(profileId, fingerprint = {}) {
+    const storagePreset = fingerprint?.storagePreset && typeof fingerprint.storagePreset === 'object'
+        ? fingerprint.storagePreset
+        : {};
+    const cookies = parseStoredCookies(storagePreset.cookies)
+        .map((cookie) => normalizeCookieForImport(cookie))
+        .filter(Boolean);
+    const origins = normalizeLocalStoragePayload(storagePreset.localStorage);
+
+    let injected = false;
+    let cookieCount = 0;
+    let storageOrigins = 0;
+    let storageItems = 0;
+
+    if (cookies.length) {
+        cookieCount = await applyProfileCookies(profileId, cookies);
+        injected = true;
+    }
+
+    if (origins.length) {
+        const result = await applyProfileLocalStorage(profileId, origins);
+        storageOrigins = Number(result?.origins || 0);
+        storageItems = Number(result?.items || 0);
+        injected = true;
+    }
+
+    if (injected) {
+        await withProfileCdpSession(profileId, async (session) => {
+            await session.send('Page.reload', { ignoreCache: false });
+            return true;
+        });
+    }
+
+    return {
+        cookies: cookieCount,
+        storageOrigins,
+        storageItems,
+        injected
+    };
+}
+
 async function applyFingerprintToCdpTarget(session, fingerprint, {
     sessionId = '',
     preloadScript = '',
@@ -3623,6 +3759,24 @@ async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUr
         browserSession.close();
         throw error;
     }
+}
+
+async function openStartupTabs(browserCdpRuntime, urls = []) {
+    const browserSession = browserCdpRuntime?.session;
+    if (!browserSession || !Array.isArray(urls) || !urls.length) {
+        return 0;
+    }
+
+    let opened = 0;
+    for (const url of urls) {
+        const targetUrl = String(url || '').trim();
+        if (!/^https?:\/\//i.test(targetUrl)) {
+            continue;
+        }
+        await browserSession.send('Target.createTarget', { url: targetUrl });
+        opened += 1;
+    }
+    return opened;
 }
 
 async function buildDashboardPayload(profileId, { refresh = false } = {}) {
@@ -3810,6 +3964,52 @@ async function clearProfileCache(profileId) {
     };
 }
 
+async function clearProfileStorageData(profileId, { cookies = false, localStorage = false } = {}) {
+    const profile = getProfile(profileId);
+    if (!profile) {
+        throw new Error('环境不存在');
+    }
+
+    if (runningProfiles.has(profileId)) {
+        throw new Error('请先停止该环境，再清理站点数据');
+    }
+
+    const userDataDir = path.join(store.dataDir, 'profiles', profile.id);
+    const targets = [];
+    if (cookies) {
+        targets.push(
+            path.join('Default', 'Cookies'),
+            path.join('Default', 'Cookies-journal'),
+            path.join('Default', 'Network', 'Cookies'),
+            path.join('Default', 'Network', 'Cookies-journal')
+        );
+    }
+    if (localStorage) {
+        targets.push(
+            path.join('Default', 'Local Storage'),
+            path.join('Default', 'Session Storage'),
+            path.join('Default', 'IndexedDB'),
+            path.join('Default', 'Storage'),
+            path.join('Default', 'shared_proto_db')
+        );
+    }
+
+    const removed = [];
+    for (const relativePath of targets) {
+        const targetPath = path.join(userDataDir, relativePath);
+        if (await fs.pathExists(targetPath)) {
+            await fs.remove(targetPath);
+            removed.push(relativePath);
+        }
+    }
+
+    return {
+        ok: true,
+        removed,
+        cleared: removed.length
+    };
+}
+
 async function openProfile(profileId, { requestId = '', restoreSession = false, skipAccountAssets = false } = {}) {
     const profile = getProfile(profileId);
     if (!profile) throw new Error('环境不存在');
@@ -3866,6 +4066,21 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 40 : 32, 'fingerprint', '解析启动指纹');
         const launchFingerprint = await resolveLaunchFingerprint(profile, mixedPort);
+        const startupPreferences = getFingerprintStartupPreferences(launchFingerprint);
+        const shouldRestoreSession = restoreSession || startupPreferences.restoreLastSession;
+        const shouldSkipAccountAssets = skipAccountAssets || startupPreferences.autoInjectAccountAssets === false;
+
+        if (startupPreferences.clearCacheBeforeLaunch) {
+            reportLaunchProgress(profile, requestId, linkedProxy ? 46 : 40, 'cache-reset', '按启动偏好清理缓存');
+            await clearProfileCache(profile.id);
+        }
+        if (startupPreferences.clearCookiesBeforeLaunch || startupPreferences.clearLocalStorageBeforeLaunch) {
+            reportLaunchProgress(profile, requestId, linkedProxy ? 50 : 44, 'storage-reset', '按启动偏好清理站点数据');
+            await clearProfileStorageData(profile.id, {
+                cookies: startupPreferences.clearCookiesBeforeLaunch,
+                localStorage: startupPreferences.clearLocalStorageBeforeLaunch
+            });
+        }
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 54 : 48, 'storage', '准备独立数据目录');
         const userDataDir = getProfileUserDataDir(profile.id);
@@ -3933,7 +4148,10 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
             launchArgs.push(`--proxy-server=socks5://127.0.0.1:${mixedPort}`);
         }
 
-        if (restoreSession) {
+        if (startupPreferences.openDevtoolsOnLaunch) {
+            launchArgs.push('--auto-open-devtools-for-tabs');
+        }
+        if (shouldRestoreSession) {
             launchArgs.push('--restore-last-session');
         } else {
             launchArgs.push('about:blank');
@@ -3961,11 +4179,22 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
         runtime.browserCdpSession = await primeInitialPageFingerprint(
             debugPort,
             launchFingerprint,
-            restoreSession ? '' : startUrl
+            shouldRestoreSession ? '' : startUrl
         );
 
+        if (!shouldRestoreSession && Array.isArray(launchFingerprint.startupUrls) && launchFingerprint.startupUrls.length) {
+            try {
+                const openedTabs = await openStartupTabs(runtime.browserCdpSession, launchFingerprint.startupUrls);
+                if (openedTabs > 0) {
+                    reportLaunchProgress(profile, requestId, 95, 'startup-tabs', `已补开 ${openedTabs} 个启动标签页`);
+                }
+            } catch (error) {
+                reportLaunchProgress(profile, requestId, 95, 'startup-tabs-error', `额外 URL 打开失败：${error.message || 'unknown'}`);
+            }
+        }
+
         const boundAccount = getPrimaryAccountForProfile(profile.id);
-        if (boundAccount && !skipAccountAssets) {
+        if (boundAccount && !shouldSkipAccountAssets) {
             reportLaunchProgress(profile, requestId, 96, 'account-assets', '同步已绑定账号数据');
             try {
                 const injection = await autoInjectAccountAssets(profile.id);
@@ -3982,6 +4211,24 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
                 }
             } catch (error) {
                 reportLaunchProgress(profile, requestId, 98, 'account-assets-error', `账号自动注入失败：${error.message || 'unknown'}`);
+            }
+        }
+
+        if (launchFingerprint.storagePreset?.cookies || launchFingerprint.storagePreset?.localStorage) {
+            reportLaunchProgress(profile, requestId, 99, 'profile-assets', '应用窗口级 Cookies / Storage 预置');
+            try {
+                const injection = await autoInjectProfileStoragePreset(profile.id, launchFingerprint);
+                if (injection.injected) {
+                    reportLaunchProgress(
+                        profile,
+                        requestId,
+                        99,
+                        'profile-assets-ready',
+                        `已应用窗口预置：Cookie ${injection.cookies} 条，Storage ${injection.storageOrigins} 站点/${injection.storageItems} 项`
+                    );
+                }
+            } catch (error) {
+                reportLaunchProgress(profile, requestId, 99, 'profile-assets-error', `窗口预置注入失败：${error.message || 'unknown'}`);
             }
         }
 

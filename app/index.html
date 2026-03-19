@@ -316,70 +316,215 @@
                     
                     <!-- LEFT COLUMN -->
                     <div class="create-main-col">
-                        <div class="panel-head" style="margin-bottom: 24px;">
+                        <div class="editor-workspace-head">
                             <div>
-                                <div class="panel-kicker">指纹配置</div>
-                                <h2>创建独立浏览器环境</h2>
+                                <div class="panel-kicker">编辑窗口</div>
+                                <h2>窗口信息与指纹设置</h2>
                             </div>
-                            <div class="panel-tag">指纹特征隔离</div>
+                            <div class="panel-tag">按截图风格重排</div>
                         </div>
 
                         <form id="profileForm" class="profile-form stack-form">
                             <input type="hidden" id="profileId">
                             <input type="hidden" id="profileTemplateId">
                             <input type="hidden" id="templateEditorId">
+                            <input type="hidden" id="profileRestoreLastSession" value="0">
+                            <input type="hidden" id="profileAutoInjectAccountAssets" value="1">
+                            <input type="hidden" id="profileClearCacheBeforeLaunch" value="0">
+                            <input type="hidden" id="profileClearCookiesBeforeLaunch" value="0">
+                            <input type="hidden" id="profileClearLocalStorageBeforeLaunch" value="0">
+                            <input type="hidden" id="profileOpenDevtoolsOnLaunch" value="0">
+                            <input type="hidden" id="profileDisableNotifications" value="0">
+
+                            <div class="editor-window-meta">
+                                <div class="editor-window-id-card">
+                                    <span class="editor-window-id-label">窗口 ID</span>
+                                    <div class="editor-window-id-line">
+                                        <code id="profileIdentityLabel">未保存</code>
+                                        <button type="button" id="copyProfileIdBtn" class="small-btn">复制</button>
+                                    </div>
+                                </div>
+                                <div class="editor-window-tip">
+                                    编辑窗口时，左侧负责录入配置，右侧会生成摘要卡，便于对照截图检查。
+                                </div>
+                            </div>
 
                             <!-- Card 1: Basic Info -->
                             <div class="form-panel">
-                                <div class="form-section-title">基础运行信息 (Basic Info)</div>
+                                <div class="form-section-title">窗口信息</div>
                                 <div class="grid two">
                                     <label>
-                                        <span>环境名称 Name</span>
+                                        <span>窗口名称</span>
                                         <input id="profileName" type="text" placeholder="例如：Project-A-Worker01" required>
                                     </label>
                                     <label>
-                                        <span>环境所属项目</span>
+                                        <span>所属项目</span>
                                         <select id="profileProjectId"></select>
                                     </label>
                                 </div>
                                 <div class="grid two">
                                     <label>
-                                        <span>操作系统预设 Platform</span>
+                                        <span>系统内核</span>
                                         <select id="profilePlatform">
-                                            <option value="Win32">Windows System</option>
-                                            <option value="MacIntel">macOS System</option>
+                                            <option value="Win32">Windows 11</option>
+                                            <option value="MacIntel">macOS</option>
                                         </select>
                                     </label>
                                     <label>
-                                        <span>绑定标签 Tags</span>
+                                        <span>标签</span>
                                         <input id="profileTags" type="text" placeholder="以逗号分割：shop, dev, test">
                                     </label>
                                 </div>
+                                <div class="grid two">
+                                    <label>
+                                        <span>默认搜索引擎</span>
+                                        <select id="profileSearchEngine">
+                                            <option value="google">Google</option>
+                                            <option value="bing">Bing</option>
+                                            <option value="duckduckgo">DuckDuckGo</option>
+                                            <option value="baidu">Baidu</option>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>User-Agent</span>
+                                        <textarea id="profileUserAgent" rows="2" placeholder="留空则使用随机生成值"></textarea>
+                                    </label>
+                                </div>
                                 <label>
-                                    <span>环境备忘录 Notes</span>
+                                    <span>备注</span>
                                     <textarea id="profileNotes" rows="2" placeholder="输入相关账号、用途和其它备忘记录"></textarea>
                                 </label>
                             </div>
 
                             <!-- Card 2: Network -->
                             <div class="form-panel">
-                                <div class="form-section-title">网络与启动 (Network & Startup)</div>
+                                <div class="form-section-title">代理、账号与启动</div>
                                 <div class="grid two">
                                     <label>
-                                        <span>代理节点 Proxy Node</span>
+                                        <span>代理节点</span>
                                         <select id="profileProxyId"></select>
                                     </label>
                                     <label>
-                                        <span>启动网址 Startup URL</span>
+                                        <span>启动网址</span>
                                         <input id="profileStartUrl" type="text" placeholder="留空则使用内置看板页">
                                     </label>
                                 </div>
+                                <div class="grid two">
+                                    <div id="profileProxySummary" class="editor-info-card">
+                                        <div class="editor-info-title">代理概览</div>
+                                        <div class="editor-info-text">未选择代理时将以直连模式启动。</div>
+                                    </div>
+                                    <div id="profileAccountSummaryCard" class="editor-info-card">
+                                        <div class="editor-info-title">平台账号</div>
+                                        <div class="editor-info-text">保存后可去账号页绑定 Cookie / LocalStorage 资产。</div>
+                                    </div>
+                                </div>
+                                <div class="editor-inline-actions" style="margin-bottom: 18px;">
+                                    <button type="button" id="jumpToProxyBtn" class="small-btn">选择代理</button>
+                                    <button type="button" id="clearSelectedProxyBtn" class="small-btn">切换直连</button>
+                                    <button type="button" id="jumpToAccountsBtn" class="small-btn">平台账号</button>
+                                </div>
+                                <label>
+                                    <span>额外启动 URLs</span>
+                                    <textarea id="profileStartupUrls" rows="3" placeholder="每行一个 https:// URL，启动后会额外补开标签页"></textarea>
+                                </label>
                                 <div class="preset-bar">
                                     <button type="button" class="small-btn preset-url-btn" data-url="">内置看板页</button>
                                     <button type="button" class="small-btn preset-url-btn" data-url="https://ipinfo.io/json">IPinfo</button>
                                     <button type="button" class="small-btn preset-url-btn" data-url="https://bot.sannysoft.com/">SannySoft</button>
                                     <button type="button" class="small-btn preset-url-btn" data-url="https://browserleaks.com/javascript">BrowserLeaks</button>
                                     <button type="button" class="small-btn preset-url-btn" data-url="https://pixelscan.net/">PixelScan</button>
+                                </div>
+                                <details class="advanced-card">
+                                    <summary>Cookies / LocalStorage 预置</summary>
+                                    <div class="advanced-card-body">
+                                        <div class="grid two">
+                                            <label>
+                                                <span>Cookies JSON</span>
+                                                <textarea id="profilePresetCookies" rows="5" placeholder='支持数组或 { "cookies": [...] }'></textarea>
+                                            </label>
+                                            <label>
+                                                <span>LocalStorage JSON</span>
+                                                <textarea id="profilePresetLocalStorage" rows="5" placeholder='支持数组或 { "origins": [...] }'></textarea>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div class="form-panel">
+                                <div class="form-section-title">偏好设置</div>
+                                <div class="preference-grid">
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">恢复上次会话</div>
+                                            <div class="preference-note">启动时恢复上次关闭前的标签页。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileRestoreLastSession">
+                                            <button type="button" class="segment-btn" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn active" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">自动注入平台账号</div>
+                                            <div class="preference-note">读取已绑定账号的 Cookie / Storage 并自动写入。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileAutoInjectAccountAssets">
+                                            <button type="button" class="segment-btn active" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">启动前删除缓存文件</div>
+                                            <div class="preference-note">清理 Cache、GPU Cache、Service Worker 缓存。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileClearCacheBeforeLaunch">
+                                            <button type="button" class="segment-btn" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn active" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">启动前删除 Cookie</div>
+                                            <div class="preference-note">清理窗口目录中的 Cookie 数据库。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileClearCookiesBeforeLaunch">
+                                            <button type="button" class="segment-btn" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn active" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">启动前删除 LocalStorage</div>
+                                            <div class="preference-note">清理 Local Storage、Session Storage 与 IndexedDB。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileClearLocalStorageBeforeLaunch">
+                                            <button type="button" class="segment-btn" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn active" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">启动时打开 DevTools</div>
+                                            <div class="preference-note">便于调试脚本、网络与页面控制流程。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileOpenDevtoolsOnLaunch">
+                                            <button type="button" class="segment-btn" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn active" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
+                                    <div class="preference-item">
+                                        <div class="preference-copy">
+                                            <div class="preference-title">屏蔽网站通知</div>
+                                            <div class="preference-note">默认拒绝通知权限请求，减少弹窗干扰。</div>
+                                        </div>
+                                        <div class="segmented-toggle" data-bool-field="profileDisableNotifications">
+                                            <button type="button" class="segment-btn" data-value="1">开启</button>
+                                            <button type="button" class="segment-btn active" data-value="0">关闭</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -608,10 +753,6 @@
                                         <input id="profileMemory" type="number" min="2" max="32" placeholder="Auto">
                                     </label>
                                 </div>
-                                <label>
-                                    <span>自定义 UA (User-Agent)</span>
-                                    <textarea id="profileUserAgent" rows="2" placeholder="填写自定义浏览器头"></textarea>
-                                </label>
                                 <div class="grid two">
                                     <label>
                                         <span>Agent 默认超时（毫秒）</span>
@@ -703,11 +844,35 @@
 
                     <!-- RIGHT COLUMN -->
                     <div class="create-side-col">
-                        
+                        <div class="panel form-panel editor-guide-panel">
+                            <div class="editor-guide-badge">窗口教程</div>
+                            <div class="editor-guide-title">理解窗口配置和指纹</div>
+                            <div class="editor-guide-text">左侧录入窗口信息、代理、账号和偏好设置，右侧根据当前配置生成概要卡，保存前可以快速核对。</div>
+                        </div>
+
                         <!-- Preview Card -->
                         <div class="panel form-panel create-preview-panel">
-                            <div class="form-section-title" style="margin-bottom: 12px; color: var(--accent-hover);">预期生成指纹预览 Output</div>
-                            <pre id="fingerprintPreview" class="fingerprint-preview-box">Waiting for configuration input...</pre>
+                            <div class="editor-summary-head">
+                                <div class="form-section-title" style="margin-bottom: 0; color: var(--accent-hover);">概要</div>
+                                <button type="button" id="summaryRandomizeBtn" class="small-btn">一键随机指纹</button>
+                            </div>
+                            <div class="editor-device-preview">
+                                <div class="editor-device-preview-toolbar">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <div class="editor-device-preview-screen">
+                                    <div class="editor-device-preview-window"></div>
+                                </div>
+                            </div>
+                            <div id="fingerprintSummaryList" class="editor-summary-list"></div>
+                            <details class="advanced-card editor-raw-preview">
+                                <summary>查看原始指纹摘要</summary>
+                                <div class="advanced-card-body">
+                                    <pre id="fingerprintPreview" class="fingerprint-preview-box">Waiting for configuration input...</pre>
+                                </div>
+                            </details>
                         </div>
 
                         <!-- Template Management -->

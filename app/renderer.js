@@ -103,6 +103,7 @@ const allocateProxyBtn = document.getElementById('allocateProxyBtn');
 const extensionTableBody = document.getElementById('extensionTableBody');
 const subscriptionList = document.getElementById('subscriptionList');
 const fingerprintPreview = document.getElementById('fingerprintPreview');
+const fingerprintSummaryList = document.getElementById('fingerprintSummaryList');
 const templateSelect = document.getElementById('templateSelect');
 const templateNameInput = document.getElementById('templateName');
 const templateNotesInput = document.getElementById('templateNotes');
@@ -150,6 +151,12 @@ const providerModelsHint = document.getElementById('providerModelsHint');
 const agentFormatDocs = document.getElementById('agentFormatDocs');
 const agentToolTimeoutInput = document.getElementById('agentToolTimeoutMs');
 const agentMaxExecutionStepsInput = document.getElementById('agentMaxExecutionSteps');
+const profileIdentityLabel = document.getElementById('profileIdentityLabel');
+const copyProfileIdBtn = document.getElementById('copyProfileIdBtn');
+const jumpToProxyBtn = document.getElementById('jumpToProxyBtn');
+const clearSelectedProxyBtn = document.getElementById('clearSelectedProxyBtn');
+const jumpToAccountsBtn = document.getElementById('jumpToAccountsBtn');
+const summaryRandomizeBtn = document.getElementById('summaryRandomizeBtn');
 const profileWindowPositionPicker = document.getElementById('profileWindowPositionPicker');
 const profileBasicSegmentedGroups = Array.from(document.querySelectorAll('.segmented-toggle'));
 const profileSelectTriggers = Array.from(document.querySelectorAll('[data-select-trigger]'));
@@ -1018,11 +1025,36 @@ function renderProfilePreview() {
     const geolocation = currentFingerprintDraft.geolocation || {};
     const media = currentFingerprintDraft.media || {};
     const windowConfig = currentFingerprintDraft.window || {};
+    const profileId = document.getElementById('profileId').value.trim();
+    const proxyId = document.getElementById('profileProxyId').value || '';
+    const proxy = (appState.settings.proxies || []).find((item) => item.id === proxyId) || null;
+    const linkedAccounts = profileId ? getAccountsByProfileId(profileId) : [];
+    const startupUrls = parseUrlListInput('profileStartupUrls');
+    const searchEngine = document.getElementById('profileSearchEngine')?.value || 'google';
+    const preferences = {
+        restoreLastSession: getProfileHiddenBoolean('profileRestoreLastSession', false),
+        autoInjectAccountAssets: getProfileHiddenBoolean('profileAutoInjectAccountAssets', true),
+        clearCacheBeforeLaunch: getProfileHiddenBoolean('profileClearCacheBeforeLaunch', false),
+        clearCookiesBeforeLaunch: getProfileHiddenBoolean('profileClearCookiesBeforeLaunch', false),
+        clearLocalStorageBeforeLaunch: getProfileHiddenBoolean('profileClearLocalStorageBeforeLaunch', false),
+        openDevtoolsOnLaunch: getProfileHiddenBoolean('profileOpenDevtoolsOnLaunch', false),
+        disableNotifications: getProfileHiddenBoolean('profileDisableNotifications', false)
+    };
+    const preferenceSummary = [
+        preferences.restoreLastSession ? '恢复会话' : '',
+        preferences.autoInjectAccountAssets ? '自动注入账号' : '',
+        preferences.clearCacheBeforeLaunch ? '清缓存' : '',
+        preferences.clearCookiesBeforeLaunch ? '清 Cookie' : '',
+        preferences.clearLocalStorageBeforeLaunch ? '清存储' : '',
+        preferences.openDevtoolsOnLaunch ? 'DevTools' : '',
+        preferences.disableNotifications ? '禁通知' : ''
+    ].filter(Boolean).join(' / ') || '标准启动';
     const preview = {
         种子: currentFingerprintDraft.seed || '新建',
         设备预设: currentFingerprintDraft.presetId || '自动',
         UserAgent: document.getElementById('profileUserAgent').value || '自动',
         平台: document.getElementById('profilePlatform').value || 'Win32',
+        搜索引擎: searchEngine,
         语言: currentFingerprintDraft.language || '自动',
         界面语言: currentFingerprintDraft.uiLanguage || '自动',
         时区: currentFingerprintDraft.timezone || '自动',
@@ -1041,12 +1073,63 @@ function renderProfilePreview() {
         声音: media.audioEnabled === false ? '关闭' : '开启',
         图片: media.imageEnabled === false ? '关闭' : '开启',
         视频: media.videoEnabled === false ? '关闭' : '开启',
+        额外标签页: startupUrls.length,
+        启动偏好: preferenceSummary,
         字体数: Array.isArray(currentFingerprintDraft.fonts) ? currentFingerprintDraft.fonts.length : 0,
         WebGPU: currentFingerprintDraft.webgpu?.enabled !== false ? (currentFingerprintDraft.gpuTier || 'medium') : '关闭',
         DNT: currentFingerprintDraft.doNotTrack || '关闭',
         WebGL厂商: currentFingerprintDraft.webglVendor || '自动',
         WebGL渲染器: currentFingerprintDraft.webglRenderer || '自动'
     };
+    if (profileIdentityLabel) {
+        profileIdentityLabel.textContent = profileId || '未保存';
+    }
+    const proxySummaryEl = document.getElementById('profileProxySummary');
+    if (proxySummaryEl) {
+        proxySummaryEl.innerHTML = proxy
+            ? `
+                <div class="editor-info-title">${escapeHtml(proxy.name || '已绑定代理')}</div>
+                <div class="editor-info-text">${escapeHtml(getProxyGeoSummary(proxy))}${proxy.latency > 0 ? ` / ${proxy.latency}ms` : ''}</div>
+            `
+            : `
+                <div class="editor-info-title">直连模式</div>
+                <div class="editor-info-text">当前窗口未绑定代理，将直接使用本机网络。</div>
+            `;
+    }
+    const accountSummaryEl = document.getElementById('profileAccountSummaryCard');
+    if (accountSummaryEl) {
+        accountSummaryEl.innerHTML = linkedAccounts.length
+            ? `
+                <div class="editor-info-title">${escapeHtml(getProfileAccountSummary(profileId))}</div>
+                <div class="editor-info-text">已绑定 ${linkedAccounts.length} 个账号，可在启动时自动注入账号资产。</div>
+            `
+            : `
+                <div class="editor-info-title">未绑定账号</div>
+                <div class="editor-info-text">保存窗口后可前往账号页绑定 Cookie / LocalStorage 资产。</div>
+            `;
+    }
+    if (fingerprintSummaryList) {
+        const summaryRows = [
+            ['操作系统', document.getElementById('profilePlatform').value || 'Win32'],
+            ['User Agent', document.getElementById('profileUserAgent').value || '自动生成'],
+            ['搜索引擎', searchEngine],
+            ['代理', proxy ? proxy.name : '直连'],
+            ['时区', currentFingerprintDraft.timezone || '自动'],
+            ['地理位置', geolocation.mode === 'manual' ? `${geolocation.latitude || 0}, ${geolocation.longitude || 0}` : (geolocation.mode || 'auto')],
+            ['窗口', windowConfig.sizeMode === 'fullscreen'
+                ? '全屏'
+                : `${windowConfig.width || '?'} x ${windowConfig.height || '?'} / ${windowConfig.position || 'top-left'}`],
+            ['媒体', `声音 ${media.audioEnabled === false ? '关' : '开'} / 图片 ${media.imageEnabled === false ? '关' : '开'} / 视频 ${media.videoEnabled === false ? '关' : '开'}`],
+            ['偏好', preferenceSummary],
+            ['额外 URLs', startupUrls.length ? startupUrls.join(' / ') : '无']
+        ];
+        fingerprintSummaryList.innerHTML = summaryRows.map(([key, value]) => `
+            <div class="editor-summary-row">
+                <div class="editor-summary-key">${escapeHtml(key)}</div>
+                <div class="editor-summary-value">${escapeHtml(String(value || '-'))}</div>
+            </div>
+        `).join('');
+    }
     fingerprintPreview.textContent = JSON.stringify(preview, null, 2);
 }
 
@@ -1060,6 +1143,24 @@ function parseStringListInput(elementId) {
         .split(/[\r\n,]+/)
         .map((item) => item.trim())
         .filter(Boolean)));
+}
+
+function parseUrlListInput(elementId) {
+    return parseStringListInput(elementId).filter((item) => /^https?:\/\//i.test(item));
+}
+
+function formatStructuredText(value) {
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (value == null) {
+        return '';
+    }
+    try {
+        return JSON.stringify(value, null, 2);
+    } catch (error) {
+        return String(value);
+    }
 }
 
 function parseSpeechVoicesInput() {
@@ -1156,7 +1257,22 @@ function captureFingerprintDraftFromForm() {
         webgpu: {
             enabled: document.getElementById('profileWebgpuEnabled').checked !== false
         },
-        doNotTrack: document.getElementById('profileDoNotTrack').value || ''
+        doNotTrack: document.getElementById('profileDoNotTrack').value || '',
+        searchEngine: document.getElementById('profileSearchEngine')?.value || 'google',
+        startupUrls: parseUrlListInput('profileStartupUrls'),
+        storagePreset: {
+            cookies: document.getElementById('profilePresetCookies')?.value || '',
+            localStorage: document.getElementById('profilePresetLocalStorage')?.value || ''
+        },
+        preferences: {
+            restoreLastSession: getProfileHiddenBoolean('profileRestoreLastSession', false),
+            autoInjectAccountAssets: getProfileHiddenBoolean('profileAutoInjectAccountAssets', true),
+            clearCacheBeforeLaunch: getProfileHiddenBoolean('profileClearCacheBeforeLaunch', false),
+            clearCookiesBeforeLaunch: getProfileHiddenBoolean('profileClearCookiesBeforeLaunch', false),
+            clearLocalStorageBeforeLaunch: getProfileHiddenBoolean('profileClearLocalStorageBeforeLaunch', false),
+            openDevtoolsOnLaunch: getProfileHiddenBoolean('profileOpenDevtoolsOnLaunch', false),
+            disableNotifications: getProfileHiddenBoolean('profileDisableNotifications', false)
+        }
     };
 }
 
@@ -1165,6 +1281,7 @@ function applyFingerprintToForm(fingerprint = {}) {
 
     document.getElementById('profilePlatform').value = fingerprint.platform || 'Win32';
     document.getElementById('profileUserAgent').value = fingerprint.userAgent || '';
+    document.getElementById('profileSearchEngine').value = fingerprint.searchEngine || 'google';
     setProfileModeValue('profileLanguageMode', !fingerprint.language || fingerprint.language === 'auto' ? 'auto' : 'manual');
     setSearchableSelectValue('profileLanguage', !fingerprint.language || fingerprint.language === 'auto' ? '' : fingerprint.language, { close: false });
     setProfileModeValue('profileUiLanguageMode', !fingerprint.uiLanguage || fingerprint.uiLanguage === 'auto' ? 'auto' : 'manual');
@@ -1195,6 +1312,16 @@ function applyFingerprintToForm(fingerprint = {}) {
     document.getElementById('profileGpuTier').value = fingerprint.gpuTier || 'medium';
     document.getElementById('profileWebgpuEnabled').checked = fingerprint.webgpu?.enabled !== false;
     document.getElementById('profileDoNotTrack').value = fingerprint.doNotTrack || '';
+    document.getElementById('profileStartupUrls').value = Array.isArray(fingerprint.startupUrls) ? fingerprint.startupUrls.join('\n') : '';
+    document.getElementById('profilePresetCookies').value = formatStructuredText(fingerprint.storagePreset?.cookies || '');
+    document.getElementById('profilePresetLocalStorage').value = formatStructuredText(fingerprint.storagePreset?.localStorage || '');
+    setProfileHiddenBoolean('profileRestoreLastSession', fingerprint.preferences?.restoreLastSession === true);
+    setProfileHiddenBoolean('profileAutoInjectAccountAssets', fingerprint.preferences?.autoInjectAccountAssets !== false);
+    setProfileHiddenBoolean('profileClearCacheBeforeLaunch', fingerprint.preferences?.clearCacheBeforeLaunch === true);
+    setProfileHiddenBoolean('profileClearCookiesBeforeLaunch', fingerprint.preferences?.clearCookiesBeforeLaunch === true);
+    setProfileHiddenBoolean('profileClearLocalStorageBeforeLaunch', fingerprint.preferences?.clearLocalStorageBeforeLaunch === true);
+    setProfileHiddenBoolean('profileOpenDevtoolsOnLaunch', fingerprint.preferences?.openDevtoolsOnLaunch === true);
+    setProfileHiddenBoolean('profileDisableNotifications', fingerprint.preferences?.disableNotifications === true);
 
     syncProfileBasicSettingsVisibility();
     captureFingerprintDraftFromForm();
@@ -1210,7 +1337,11 @@ async function randomizeFingerprintFields(overrides = {}) {
         timezone: currentFingerprintDraft.timezone,
         geolocation: clone(currentFingerprintDraft.geolocation || {}),
         media: clone(currentFingerprintDraft.media || {}),
-        window: clone(currentFingerprintDraft.window || {})
+        window: clone(currentFingerprintDraft.window || {}),
+        searchEngine: currentFingerprintDraft.searchEngine || 'google',
+        startupUrls: clone(currentFingerprintDraft.startupUrls || []),
+        storagePreset: clone(currentFingerprintDraft.storagePreset || {}),
+        preferences: clone(currentFingerprintDraft.preferences || {})
     };
     const fingerprint = await window.xbrowser.generateFingerprint({ platform });
     applyFingerprintToForm({
@@ -1220,7 +1351,11 @@ async function randomizeFingerprintFields(overrides = {}) {
         timezone: preserved.timezone || fingerprint.timezone,
         geolocation: Object.keys(preserved.geolocation || {}).length ? preserved.geolocation : fingerprint.geolocation,
         media: Object.keys(preserved.media || {}).length ? preserved.media : fingerprint.media,
-        window: Object.keys(preserved.window || {}).length ? preserved.window : fingerprint.window
+        window: Object.keys(preserved.window || {}).length ? preserved.window : fingerprint.window,
+        searchEngine: preserved.searchEngine || fingerprint.searchEngine,
+        startupUrls: preserved.startupUrls || fingerprint.startupUrls,
+        storagePreset: Object.keys(preserved.storagePreset || {}).length ? preserved.storagePreset : fingerprint.storagePreset,
+        preferences: Object.keys(preserved.preferences || {}).length ? preserved.preferences : fingerprint.preferences
     });
 }
 
@@ -2705,6 +2840,33 @@ document.getElementById('randomizeBtn').addEventListener('click', async () => {
     await randomizeFingerprintFields();
 });
 
+summaryRandomizeBtn?.addEventListener('click', async () => {
+    await randomizeFingerprintFields();
+});
+
+copyProfileIdBtn?.addEventListener('click', async () => {
+    const value = String(document.getElementById('profileId').value || '').trim();
+    if (!value) {
+        showToast('当前窗口还没有可复制的 ID。');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(value);
+        showToast('窗口 ID 已复制。');
+    } catch (error) {
+        showToast('复制失败，请稍后重试。');
+    }
+});
+
+jumpToProxyBtn?.addEventListener('click', () => setView('proxies'));
+
+clearSelectedProxyBtn?.addEventListener('click', () => {
+    document.getElementById('profileProxyId').value = '';
+    updateProfileDraftPreview();
+});
+
+jumpToAccountsBtn?.addEventListener('click', () => setView('accounts'));
+
 document.getElementById('profilePlatform').addEventListener('change', async () => {
     await randomizeFingerprintFields();
 });
@@ -2712,6 +2874,7 @@ document.getElementById('profilePlatform').addEventListener('change', async () =
 document.querySelectorAll('.preset-url-btn').forEach((button) => {
     button.addEventListener('click', () => {
         document.getElementById('profileStartUrl').value = button.dataset.url;
+        updateProfileDraftPreview();
     });
 });
 
