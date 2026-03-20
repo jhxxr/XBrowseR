@@ -1,19 +1,31 @@
+!macro customUnInstallCheck
+  ${If} $R0 == 2
+    DetailPrint "Ignoring legacy uninstaller exit code 2 during upgrade."
+    ClearErrors
+    StrCpy $R0 0
+    Return
+  ${EndIf}
+!macroend
+
 !macro customUnInstall
-  Delete "$PLUGINSDIR\delete-install-data"
+  ${IfNot} ${isUpdated}
+  ${AndIfNot} ${Silent}
+    Delete "$PLUGINSDIR\delete-install-data"
 
-  MessageBox MB_YESNOCANCEL|MB_ICONQUESTION "Delete local data in the installation directory as well?$\r$\n$\r$\nYes: remove $INSTDIR\data$\r$\nNo: keep that folder" /SD IDCANCEL IDYES deleteData IDNO keepData
+    MessageBox MB_YESNOCANCEL|MB_ICONQUESTION "Delete local data in the installation directory as well?$\r$\n$\r$\nYes: remove $INSTDIR\data$\r$\nNo: keep that folder" /SD IDCANCEL IDYES deleteData IDNO keepData
 
-  Abort
+    Abort
 
-  deleteData:
-    FileOpen $0 "$PLUGINSDIR\delete-install-data" w
-    FileClose $0
-    Goto uninstallChoiceDone
+    deleteData:
+      FileOpen $0 "$PLUGINSDIR\delete-install-data" w
+      FileClose $0
+      Goto uninstallChoiceDone
 
-  keepData:
-    Goto uninstallChoiceDone
+    keepData:
+      Goto uninstallChoiceDone
 
-  uninstallChoiceDone:
+    uninstallChoiceDone:
+  ${EndIf}
 !macroend
 
 !macro customRemoveFiles
