@@ -4091,7 +4091,7 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
         await ensureChromiumPreferences(userDataDir, launchFingerprint);
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 68 : 62, 'extension', '生成指纹扩展');
-        const extensionDir = await ensureFingerprintExtension(BASE_DIR, profile.id, launchFingerprint);
+        const extensionDir = await ensureFingerprintExtension(userDataDir, profile.id, launchFingerprint);
         const profileExtensions = (profile.extensionIds || [])
             .map((extensionId) => getExtension(extensionId))
             .filter((extension) => extension && extension.enabled && extension.path && fs.existsSync(extension.path));
