@@ -40,6 +40,8 @@
       "app/**/*",
       "lib/**/*",
       "scripts/**/*",
+      "!bin",
+      "!bin/**/*",
       "main.js",
       "preload.js",
       "profile-preload.js",
