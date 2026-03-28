@@ -1,0 +1,12 @@
+{
+  "name": "XBrowseR Chromium",
+  "installDir": "chromium",
+  "platforms": {
+    "win64": {
+      "version": "147.0.0.0-xbrowser.1",
+      "url": "https://example.com/releases/custom-chromium-win64.zip",
+      "archiveRoot": "chrome-win64",
+      "executable": "chrome-win64/chrome.exe"
+    }
+  }
+}

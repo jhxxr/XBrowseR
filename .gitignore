@@ -9,6 +9,7 @@ release/
 # Runtime data
 data/
 *.log
+build/browser-source.json
 
 # Downloaded Mihomo artifacts
 bin/*
@@ -32,5 +33,4 @@ Desktop.ini
 .vscode/
 
 ToDo.md
-
 

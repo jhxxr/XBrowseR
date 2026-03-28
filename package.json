@@ -1,6 +1,6 @@
 {
   "name": "xbrowser",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Mihomo-powered fingerprint browser manager",
   "main": "main.js",
   "author": "OpenAI Codex",
@@ -11,6 +11,7 @@
   },
   "scripts": {
     "start": "electron .",
+    "browser:stage": "node scripts/stage-custom-browser.js",
     "ensure:browser": "node scripts/ensure-browser.js",
     "ensure:mihomo": "node scripts/ensure-mihomo.js",
     "ensure:assets": "npm run ensure:mihomo && npm run ensure:browser",
