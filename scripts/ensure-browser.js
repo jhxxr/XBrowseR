@@ -14,6 +14,6 @@ async function main() {
 }
 
 main().catch((error) => {
-    console.error(`Failed to prepare ${BROWSER_NAME}. Build it in your separate Chromium repo, then stage it here with "npm run browser:stage -- --source <zip-or-dir> --version <version>", or configure ${DEFAULT_CONFIG_RELATIVE_PATH} / XBROWSER_BROWSER_* env vars.`, error);
+    console.error(`Failed to prepare ${BROWSER_NAME}. The app now defaults to official Chromium snapshots. You can also stage a local browser with "npm run browser:stage -- --source <zip-or-dir> --version <version>", or configure ${DEFAULT_CONFIG_RELATIVE_PATH} / XBROWSER_BROWSER_* env vars.`, error);
     process.exitCode = 1;
 });

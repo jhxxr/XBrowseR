@@ -166,6 +166,12 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
     border: 1px solid var(--panel-border);
 }
 
+.sidebar-divider {
+    height: 1px;
+    margin: 16px 0 14px;
+    background: rgba(148, 163, 184, 0.12);
+}
+
 .sidebar-label {
     font-size: 11px;
     color: var(--text-muted);
@@ -180,6 +186,32 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
     font-weight: 600;
     font-family: 'Inter', monospace;
     color: var(--accent-hover);
+}
+
+.sidebar-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.sidebar-field span {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 700;
+}
+
+.sidebar-inline-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.sidebar-card .ghost-btn {
+    margin-top: 4px;
 }
 
 /* Topbar */

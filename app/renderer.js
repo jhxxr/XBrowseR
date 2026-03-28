@@ -81,6 +81,24 @@ function createEmptyUpdaterState() {
     };
 }
 
+function createEmptyBrowserRuntimeState() {
+    return {
+        source: 'official-chromium-snapshots',
+        sourceName: 'Official Chromium Snapshots',
+        loading: false,
+        refreshedAt: 0,
+        latestVersion: '',
+        available: [],
+        error: '',
+        activeVersion: '',
+        activeLabel: '',
+        activePath: '',
+        binary: '',
+        installDir: '',
+        installed: []
+    };
+}
+
 let appState = {
     profiles: [],
     templates: [],
@@ -89,6 +107,7 @@ let appState = {
         projects: [],
         proxies: [],
         subscriptions: [],
+        browser: { source: 'official-chromium-snapshots', activeVersion: '' },
         api: { enabled: true, port: 23919 },
         agent: { providers: [], activeProviderId: '', toolTimeoutMs: 20000, maxExecutionSteps: 10 },
         ui: { activeView: 'home', homeProjectId: 'all' }
@@ -96,6 +115,7 @@ let appState = {
     runtime: {
         running: [],
         providerFormats: [],
+        browser: createEmptyBrowserRuntimeState(),
         agent: createEmptyAgentRuntimeState(),
         sync: createEmptySyncRuntimeState(),
         updater: createEmptyUpdaterState()
@@ -164,6 +184,13 @@ const syncEventLog = document.getElementById('syncEventLog');
 const startSyncBtn = document.getElementById('startSyncBtn');
 const stopSyncBtn = document.getElementById('stopSyncBtn');
 const updateActionBtn = document.getElementById('updateActionBtn');
+const browserKernelStatus = document.getElementById('browserKernelStatus');
+const browserInstalledSelect = document.getElementById('browserInstalledSelect');
+const browserAvailableSelect = document.getElementById('browserAvailableSelect');
+const refreshBrowserCatalogBtn = document.getElementById('refreshBrowserCatalogBtn');
+const installBrowserVersionBtn = document.getElementById('installBrowserVersionBtn');
+const activateBrowserVersionBtn = document.getElementById('activateBrowserVersionBtn');
+const openBrowserInstallDirBtn = document.getElementById('openBrowserInstallDirBtn');
 
 const agentProviderForm = document.getElementById('agentProviderForm');
 const agentProviderList = document.getElementById('agentProviderList');
@@ -827,6 +854,42 @@ function renderStats() {
         : (appState.runtime.apiUrl ? `API ${appState.runtime.apiUrl}` : 'API 未启用');
 }
 
+function renderBrowserKernelPanel() {
+    if (!browserKernelStatus || !browserInstalledSelect || !browserAvailableSelect) {
+        return;
+    }
+
+    const browser = getBrowserRuntimeState();
+    const installed = Array.isArray(browser.installed) ? browser.installed : [];
+    const available = Array.isArray(browser.available) ? browser.available : [];
+
+    const statusText = browser.activeLabel
+        ? `${browser.activeLabel}${browser.loading ? ' · refreshing' : ''}`
+        : (browser.loading ? 'Loading official Chromium snapshots...' : 'No Chromium installed');
+    browserKernelStatus.textContent = browser.error
+        ? `${statusText} · ${browser.error}`
+        : statusText;
+
+    browserInstalledSelect.innerHTML = installed.length
+        ? installed.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || item.id)}</option>`).join('')
+        : '<option value="">No installed versions</option>';
+    browserInstalledSelect.value = installed.some((item) => item.id === browser.activeVersion)
+        ? browser.activeVersion
+        : (installed[0]?.id || '');
+
+    browserAvailableSelect.innerHTML = available.length
+        ? available.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || item.id)}</option>`).join('')
+        : '<option value="">No remote versions</option>';
+    if (available.length && !browserAvailableSelect.value) {
+        browserAvailableSelect.value = available[0].id;
+    }
+
+    activateBrowserVersionBtn.disabled = !browserInstalledSelect.value || browserInstalledSelect.value === browser.activeVersion;
+    installBrowserVersionBtn.disabled = !browserAvailableSelect.value || browser.loading;
+    refreshBrowserCatalogBtn.disabled = browser.loading;
+    openBrowserInstallDirBtn.disabled = !browser.installDir;
+}
+
 function renderUpdaterAction() {
     if (!updateActionBtn) {
         return;
@@ -1065,6 +1128,10 @@ function getAgentRuntime() {
 
 function getUpdaterState() {
     return appState.runtime.updater || createEmptyUpdaterState();
+}
+
+function getBrowserRuntimeState() {
+    return appState.runtime.browser || createEmptyBrowserRuntimeState();
 }
 
 function getAgentBatchState(runtimeAgent = getAgentRuntime()) {
@@ -2162,6 +2229,7 @@ function renderSyncPanel() {
 
 function renderAll() {
     renderStats();
+    renderBrowserKernelPanel();
     renderUpdaterAction();
     renderProjectOptions();
     renderAccountProfileOptions();
@@ -2903,6 +2971,37 @@ importCrxExtensionBtn.addEventListener('click', async () => {
         showToast(`CRX 已导入：${result.name}`);
         setView('extensions');
     }
+});
+
+refreshBrowserCatalogBtn?.addEventListener('click', async () => {
+    const browser = await window.xbrowser.refreshBrowserCatalog();
+    showToast(browser?.error ? `Chromium list refresh failed: ${browser.error}` : 'Chromium versions refreshed');
+});
+
+installBrowserVersionBtn?.addEventListener('click', async () => {
+    const revision = browserAvailableSelect?.value || '';
+    if (!revision) {
+        showToast('Select a Chromium revision first');
+        return;
+    }
+
+    const browser = await window.xbrowser.installBrowserVersion({ revision });
+    showToast(browser?.activeVersion ? `Installed and activated Chromium r${browser.activeVersion}` : `Installed Chromium r${revision}`);
+});
+
+activateBrowserVersionBtn?.addEventListener('click', async () => {
+    const revision = browserInstalledSelect?.value || '';
+    if (!revision) {
+        showToast('Select an installed Chromium revision first');
+        return;
+    }
+
+    const browser = await window.xbrowser.activateBrowserVersion({ revision });
+    showToast(browser?.activeVersion ? `Activated Chromium r${browser.activeVersion}` : `Activated Chromium r${revision}`);
+});
+
+openBrowserInstallDirBtn?.addEventListener('click', () => {
+    window.xbrowser.openBrowserDir();
 });
 
 document.getElementById('openDataDirBtn').addEventListener('click', () => {

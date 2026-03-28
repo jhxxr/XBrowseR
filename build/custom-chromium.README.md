@@ -1,37 +1,30 @@
-# Custom Chromium
+# Chromium Kernel
 
-This repository is the browser app repository, not the Chromium build repository.
+Default behavior:
 
-Build your custom Chromium in the sibling project:
+- XBrowseR now uses official Chromium snapshots from the public Chromium snapshots bucket.
+- Versions are identified by snapshot revision, for example `r1606646`.
+- Downloaded kernels are stored under `bin/chromium/official/<revision>`.
 
-- `E:\0JHX\Project\xbrowser-chromium-build`
+## In-App Management
 
-Then stage the produced zip or extracted folder into this app repository.
+Use the sidebar `Chromium Kernel` section to:
 
-## Goal
+- refresh recent official revisions
+- download a revision
+- activate an installed revision
 
-Replace `Chrome for Testing` with your own Chromium build and stage it into `bin/chromium`.
+## Optional Manual Import
 
-## Stage Into XBrowseR
-
-After your separate Chromium repo finishes building, stage the generated zip or extracted folder:
+If you still want to stage a local Chromium zip or extracted directory manually:
 
 ```powershell
 npm run browser:stage -- --source <zip-or-dir> --version <version>
 ```
 
-Example:
-
-```powershell
-npm run browser:stage -- --source ..\xbrowser-chromium-build\out\releases\xbrowser-chromium-147.0.0.0-ungoogled.1.zip --version 147.0.0.0-ungoogled.1
-```
-
-This does three things:
-- Copies the browser files into `bin/chromium`
-- Writes `bin/chromium/.browser-version.json`
-- Writes `build/browser-source.json`
+This copies the browser into `bin/chromium` and writes local metadata.
 
 ## Notes
 
-- `Custom Chromium` removes the explicit CfT product marker, but it does not fix the current CDP leakage by itself.
+- Switching away from `Chrome for Testing` removes the visible CfT product marker, but it does not fix the current CDP leakage by itself.
 - If you want Cloudflare-sensitive manual browsing, the next work item is splitting manual browsing from agent automation and reducing `Runtime.enable` / auto-attach usage.

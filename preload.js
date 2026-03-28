@@ -3,6 +3,10 @@ const { createEmptyAgentRuntimeState } = require('./lib/agent-runtime');
 
 contextBridge.exposeInMainWorld('xbrowser', {
     bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
+    refreshBrowserCatalog: () => ipcRenderer.invoke('browser:catalog:refresh'),
+    installBrowserVersion: (payload) => ipcRenderer.invoke('browser:install', payload),
+    activateBrowserVersion: (payload) => ipcRenderer.invoke('browser:activate', payload),
+    openBrowserDir: () => ipcRenderer.invoke('browser:open-dir'),
     checkForUpdates: () => ipcRenderer.invoke('app:update:check'),
     installUpdate: () => ipcRenderer.invoke('app:update:install'),
     getEmptyAgentRuntimeState: () => createEmptyAgentRuntimeState(),

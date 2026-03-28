@@ -17,7 +17,17 @@ const { createAgentController } = require('./lib/ai-agent');
 const { createEmptyAgentRuntimeState } = require('./lib/agent-runtime');
 const { createProfileSyncController, createEmptySyncState } = require('./lib/profile-sync');
 const { createFingerprint, buildDefaultSpeechVoices } = require('./lib/fingerprint');
-const { ensureBundledBrowser, resolveBrowserExecutable } = require('./lib/browser-download');
+const {
+    BROWSER_NAME,
+    OFFICIAL_BROWSER_SOURCE_ID,
+    OFFICIAL_BROWSER_SOURCE_NAME,
+    getOfficialBrowserRoot,
+    listInstalledBrowsers,
+    fetchAvailableOfficialBrowsers,
+    installOfficialBrowserRevision,
+    ensureBundledBrowser,
+    resolveBrowserExecutable
+} = require('./lib/browser-download');
 const { parseProxyLink, parseSubscriptionContent, startCore, waitForMihomoReady, stopProcess, getBinaryPath } = require('./lib/mihomo');
 const { ensureBundledMihomo, MIHOMO_VERSION } = require('./lib/mihomo-download');
 const { ensureFingerprintExtension, createPageScript } = require('./lib/chrome-extension');
@@ -25,17 +35,15 @@ const { PROVIDER_FORMATS, buildProviderRecord, ensureAgentSettings, fetchModelsF
 const { createUpdaterController, createEmptyUpdaterState } = require('./lib/updater');
 
 const BASE_DIR = __dirname;
-const LEGACY_DATA_ROOT_DIR = app.isPackaged ? path.dirname(process.execPath) : BASE_DIR;
-
-function resolveDataRootDir() {
-    if (!app.isPackaged) {
-        return BASE_DIR;
-    }
-    const systemBaseDir = process.platform === 'win32'
-        ? (process.env.LOCALAPPDATA || app.getPath('appData'))
-        : app.getPath('appData');
-    return path.join(systemBaseDir, app.getName());
-}
+const DATA_ROOT_DIR = app.isPackaged ? path.dirname(process.execPath) : BASE_DIR;
+const LEGACY_SYSTEM_DATA_ROOT_DIR = app.isPackaged
+    ? path.join(
+        process.platform === 'win32'
+            ? (process.env.LOCALAPPDATA || app.getPath('appData'))
+            : app.getPath('appData'),
+        app.getName()
+    )
+    : BASE_DIR;
 
 function directoryHasEntries(targetDir) {
     try {
@@ -79,8 +87,7 @@ function migrateLegacyInstallData(legacyDataDir, targetDataDir) {
     }
 }
 
-const DATA_ROOT_DIR = resolveDataRootDir();
-const LEGACY_APP_DATA_DIR = path.join(LEGACY_DATA_ROOT_DIR, 'data');
+const LEGACY_APP_DATA_DIR = path.join(LEGACY_SYSTEM_DATA_ROOT_DIR, 'data');
 const APP_DATA_DIR = path.join(DATA_ROOT_DIR, 'data');
 migrateLegacyInstallData(LEGACY_APP_DATA_DIR, APP_DATA_DIR);
 app.setPath('userData', path.join(APP_DATA_DIR, 'electron'));
@@ -131,6 +138,15 @@ const runningProfiles = new Map();
 let agentController = null;
 let syncController = null;
 let updaterController = null;
+let browserCatalogState = {
+    source: OFFICIAL_BROWSER_SOURCE_ID,
+    sourceName: OFFICIAL_BROWSER_SOURCE_NAME,
+    loading: false,
+    refreshedAt: 0,
+    latestVersion: '',
+    available: [],
+    error: ''
+};
 
 function getDefaultProjectRecord() {
     return {
@@ -255,6 +271,7 @@ function ensureProjectSettings(input = {}) {
         extensions: normalizeExtensions(source.extensions || []),
         proxies: normalizeProxies(source.proxies || []),
         proxyAllocation: normalizeProxyAllocation(source.proxyAllocation || {}),
+        browser: normalizeBrowserSettings(source.browser || {}),
         ui: {
             ...(source.ui || {})
         }
@@ -265,6 +282,14 @@ function ensureProjectSettings(input = {}) {
         ? homeProjectId
         : 'all';
     return next;
+}
+
+function normalizeBrowserSettings(input = {}) {
+    const source = input && typeof input === 'object' ? input : {};
+    return {
+        source: OFFICIAL_BROWSER_SOURCE_ID,
+        activeVersion: String(source.activeVersion || '').trim()
+    };
 }
 
 function normalizeProxyAllocation(input = {}, existing = null) {
@@ -3884,6 +3909,66 @@ async function saveAll() {
     ]);
 }
 
+function getBrowserRuntimeState() {
+    const activeVersion = String(settings?.browser?.activeVersion || '').trim();
+    const installed = listInstalledBrowsers(BASE_DIR).map((item) => ({
+        ...item,
+        active: item.id === activeVersion
+    }));
+    const activeBrowser = installed.find((item) => item.active) || installed[0] || null;
+
+    return {
+        source: browserCatalogState.source,
+        sourceName: browserCatalogState.sourceName,
+        loading: !!browserCatalogState.loading,
+        refreshedAt: Number(browserCatalogState.refreshedAt || 0),
+        latestVersion: browserCatalogState.latestVersion || '',
+        available: Array.isArray(browserCatalogState.available) ? browserCatalogState.available : [],
+        error: browserCatalogState.error || '',
+        activeVersion: activeBrowser?.id || activeVersion,
+        activeLabel: activeBrowser?.label || '',
+        activePath: activeBrowser?.rootDir || '',
+        binary: resolveBrowserExecutable(BASE_DIR, { activeVersion }),
+        installDir: getOfficialBrowserRoot(BASE_DIR),
+        installed
+    };
+}
+
+async function refreshBrowserCatalog(force = false) {
+    if (browserCatalogState.loading && !force) {
+        return getBrowserRuntimeState();
+    }
+
+    browserCatalogState = {
+        ...browserCatalogState,
+        loading: true,
+        error: force ? '' : browserCatalogState.error
+    };
+    notifyState();
+
+    try {
+        const available = await fetchAvailableOfficialBrowsers(20);
+        browserCatalogState = {
+            ...browserCatalogState,
+            loading: false,
+            refreshedAt: Date.now(),
+            latestVersion: available[0]?.id || '',
+            available,
+            error: ''
+        };
+    } catch (error) {
+        browserCatalogState = {
+            ...browserCatalogState,
+            loading: false,
+            refreshedAt: Date.now(),
+            error: error?.message || String(error || 'Failed to load Chromium versions')
+        };
+    }
+
+    notifyState();
+    return getBrowserRuntimeState();
+}
+
 function buildState() {
     const activeProvider = getActiveAgentProvider();
     return {
@@ -3899,7 +3984,8 @@ function buildState() {
             apiUrl: settings?.api?.enabled ? `http://127.0.0.1:${settings.api.port}` : '',
             mihomoBinary: getBinaryPath(BASE_DIR),
             mihomoReady: fs.existsSync(getBinaryPath(BASE_DIR)),
-            browserBinary: resolveBrowserExecutable(BASE_DIR),
+            browserBinary: resolveBrowserExecutable(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' }),
+            browser: getBrowserRuntimeState(),
             running: Array.from(runningProfiles.entries()).map(([id, runtime]) => ({
                 id,
                 port: runtime.port,
@@ -4082,11 +4168,16 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
 
     reportLaunchProgress(profile, requestId, 6, 'prepare', '校验浏览器环境');
 
-    let browserBinary = resolveBrowserExecutable(BASE_DIR);
+    let browserBinary = resolveBrowserExecutable(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 8, 'browser-download', '准备内置浏览器内核');
-        await ensureBundledBrowser(BASE_DIR);
-        browserBinary = resolveBrowserExecutable(BASE_DIR);
+        await ensureBundledBrowser(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
+        const installedBrowsers = listInstalledBrowsers(BASE_DIR);
+        if (!settings.browser.activeVersion && installedBrowsers[0]) {
+            settings.browser.activeVersion = installedBrowsers[0].id;
+            await store.saveSettings(settings);
+        }
+        browserBinary = resolveBrowserExecutable(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
     }
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 0, 'error', '未找到 Chrome 或 Chromium', { error: true, done: true });
@@ -4555,6 +4646,12 @@ app.whenReady().then(async () => {
     await store.saveSettings(settings);
     await accountStore.saveAccounts(accounts);
 
+    const installedBrowsers = listInstalledBrowsers(BASE_DIR);
+    if (!settings.browser.activeVersion && installedBrowsers[0]) {
+        settings.browser.activeVersion = installedBrowsers[0].id;
+        await store.saveSettings(settings);
+    }
+
     agentController = createAgentController({
         runtimeDir: store.runtimeDir,
         getAgentSettings: () => ({
@@ -4592,8 +4689,38 @@ app.whenReady().then(async () => {
     await restartApiServer();
     updaterController = createUpdaterController({ onStateChanged: notifyState });
     await updaterController.initialize();
+    refreshBrowserCatalog().catch((error) => {
+        console.error('Failed to refresh Chromium catalog:', error);
+    });
 
     ipcMain.handle('app:bootstrap', async () => buildState());
+    ipcMain.handle('browser:catalog:refresh', async () => refreshBrowserCatalog(true));
+    ipcMain.handle('browser:install', async (event, payload) => {
+        const revision = String(payload?.revision || '').trim();
+        if (!revision) {
+            throw new Error('Chromium revision is required');
+        }
+        await installOfficialBrowserRevision(BASE_DIR, revision, { force: false });
+        settings.browser.activeVersion = revision;
+        await store.saveSettings(settings);
+        notifyState();
+        return getBrowserRuntimeState();
+    });
+    ipcMain.handle('browser:activate', async (event, payload) => {
+        const revision = String(payload?.revision || '').trim();
+        if (!revision) {
+            throw new Error('Chromium revision is required');
+        }
+        const installed = listInstalledBrowsers(BASE_DIR).find((item) => item.id === revision);
+        if (!installed) {
+            throw new Error(`Chromium revision not installed: ${revision}`);
+        }
+        settings.browser.activeVersion = revision;
+        await store.saveSettings(settings);
+        notifyState();
+        return getBrowserRuntimeState();
+    });
+    ipcMain.handle('browser:open-dir', async () => shell.openPath(getOfficialBrowserRoot(BASE_DIR)));
     ipcMain.handle('app:update:check', async () => {
         if (!updaterController) {
             return createEmptyUpdaterState();
