@@ -25,8 +25,64 @@ const { PROVIDER_FORMATS, buildProviderRecord, ensureAgentSettings, fetchModelsF
 const { createUpdaterController, createEmptyUpdaterState } = require('./lib/updater');
 
 const BASE_DIR = __dirname;
-const DATA_ROOT_DIR = app.isPackaged ? path.dirname(process.execPath) : BASE_DIR;
+const LEGACY_DATA_ROOT_DIR = app.isPackaged ? path.dirname(process.execPath) : BASE_DIR;
+
+function resolveDataRootDir() {
+    if (!app.isPackaged) {
+        return BASE_DIR;
+    }
+    const systemBaseDir = process.platform === 'win32'
+        ? (process.env.LOCALAPPDATA || app.getPath('appData'))
+        : app.getPath('appData');
+    return path.join(systemBaseDir, app.getName());
+}
+
+function directoryHasEntries(targetDir) {
+    try {
+        return fs.pathExistsSync(targetDir) && fs.readdirSync(targetDir).length > 0;
+    } catch (error) {
+        return false;
+    }
+}
+
+function copyDirectoryContentsSync(sourceDir, targetDir) {
+    fs.ensureDirSync(targetDir);
+    for (const entry of fs.readdirSync(sourceDir)) {
+        fs.copySync(
+            path.join(sourceDir, entry),
+            path.join(targetDir, entry),
+            { overwrite: false, errorOnExist: false }
+        );
+    }
+}
+
+function migrateLegacyInstallData(legacyDataDir, targetDataDir) {
+    if (!app.isPackaged) {
+        return;
+    }
+    if (!legacyDataDir || !targetDataDir) {
+        return;
+    }
+    if (path.resolve(legacyDataDir) === path.resolve(targetDataDir)) {
+        return;
+    }
+    if (!directoryHasEntries(legacyDataDir) || directoryHasEntries(targetDataDir)) {
+        return;
+    }
+
+    try {
+        fs.ensureDirSync(path.dirname(targetDataDir));
+        copyDirectoryContentsSync(legacyDataDir, targetDataDir);
+        console.info(`[data] migrated legacy install data from ${legacyDataDir} to ${targetDataDir}`);
+    } catch (error) {
+        console.warn('[data] failed to migrate legacy install data:', error);
+    }
+}
+
+const DATA_ROOT_DIR = resolveDataRootDir();
+const LEGACY_APP_DATA_DIR = path.join(LEGACY_DATA_ROOT_DIR, 'data');
 const APP_DATA_DIR = path.join(DATA_ROOT_DIR, 'data');
+migrateLegacyInstallData(LEGACY_APP_DATA_DIR, APP_DATA_DIR);
 app.setPath('userData', path.join(APP_DATA_DIR, 'electron'));
 app.setPath('sessionData', path.join(APP_DATA_DIR, 'session'));
 app.setAppLogsPath(path.join(APP_DATA_DIR, 'logs'));

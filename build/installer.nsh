@@ -10,9 +10,10 @@
 !macro customUnInstall
   ${IfNot} ${isUpdated}
   ${AndIfNot} ${Silent}
+    IfFileExists "$INSTDIR\data" 0 uninstallChoiceDone
     Delete "$PLUGINSDIR\delete-install-data"
 
-    MessageBox MB_YESNOCANCEL|MB_ICONQUESTION "Delete local data in the installation directory as well?$\r$\n$\r$\nYes: remove $INSTDIR\data$\r$\nNo: keep that folder" /SD IDCANCEL IDYES deleteData IDNO keepData
+    MessageBox MB_YESNOCANCEL|MB_ICONQUESTION "Delete legacy local data left in the installation directory as well?$\r$\n$\r$\nYes: remove $INSTDIR\data$\r$\nNo: keep that folder" /SD IDCANCEL IDYES deleteData IDNO keepData
 
     Abort
 
