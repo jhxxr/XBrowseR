@@ -185,11 +185,15 @@ const startSyncBtn = document.getElementById('startSyncBtn');
 const stopSyncBtn = document.getElementById('stopSyncBtn');
 const updateActionBtn = document.getElementById('updateActionBtn');
 const browserKernelStatus = document.getElementById('browserKernelStatus');
-const browserInstalledSelect = document.getElementById('browserInstalledSelect');
-const browserAvailableSelect = document.getElementById('browserAvailableSelect');
+const browserKernelMenuBtn = document.getElementById('browserKernelMenuBtn');
+const browserKernelMenu = document.getElementById('browserKernelMenu');
+const browserKernelMenuStatus = document.getElementById('browserKernelMenuStatus');
+const browserKernelMenuHeadline = document.getElementById('browserKernelMenuHeadline');
+const browserKernelMenuBadge = document.getElementById('browserKernelMenuBadge');
+const browserInstalledList = document.getElementById('browserInstalledList');
+const browserAvailableList = document.getElementById('browserAvailableList');
+const browserAvailableListHint = document.getElementById('browserAvailableListHint');
 const refreshBrowserCatalogBtn = document.getElementById('refreshBrowserCatalogBtn');
-const installBrowserVersionBtn = document.getElementById('installBrowserVersionBtn');
-const activateBrowserVersionBtn = document.getElementById('activateBrowserVersionBtn');
 const openBrowserInstallDirBtn = document.getElementById('openBrowserInstallDirBtn');
 
 const agentProviderForm = document.getElementById('agentProviderForm');
@@ -230,9 +234,11 @@ let proxyCountryFilter = '';
 let proxyCityFilter = '';
 let proxyLatencyFilter = '';
 let lastUpdaterToastKey = '';
+let browserKernelMenuOpen = false;
 
 const launchProgressByProfileId = new Map();
 const launchCleanupTimers = new Map();
+const BROWSER_AVAILABLE_PREVIEW_LIMIT = 5;
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -245,6 +251,50 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function setBrowserKernelMenuOpen(open) {
+    browserKernelMenuOpen = !!open;
+    if (!browserKernelMenu || !browserKernelMenuBtn) {
+        return;
+    }
+
+    browserKernelMenu.hidden = !browserKernelMenuOpen;
+    browserKernelMenuBtn.setAttribute('aria-expanded', browserKernelMenuOpen ? 'true' : 'false');
+    browserKernelMenuBtn.parentElement?.classList.toggle('is-open', browserKernelMenuOpen);
+}
+
+function renderBrowserKernelEmpty(message) {
+    return `<div class="topbar-kernel-empty">${escapeHtml(message)}</div>`;
+}
+
+function renderBrowserKernelItem({
+    title = '',
+    meta = [],
+    tags = [],
+    actionLabel = '',
+    actionKind = '',
+    revision = '',
+    disabled = false,
+    active = false
+} = {}) {
+    const metaText = (Array.isArray(meta) ? meta : [meta]).filter(Boolean);
+    const actionHtml = actionLabel
+        ? `<button type="button" class="small-btn topbar-kernel-item-action" data-browser-kernel-action="${escapeHtml(actionKind)}" data-revision="${escapeHtml(revision)}" ${disabled ? 'disabled' : ''}>${escapeHtml(actionLabel)}</button>`
+        : '';
+
+    return `
+        <div class="topbar-kernel-item ${active ? 'is-active' : ''}">
+            <div class="topbar-kernel-item-main">
+                <div class="topbar-kernel-item-title">${escapeHtml(title)}</div>
+                <div class="topbar-kernel-item-meta">
+                    ${tags.map((tag) => `<span class="topbar-kernel-tag ${tag.type === 'active' ? 'is-active' : ''}">${escapeHtml(tag.label)}</span>`).join('')}
+                    ${metaText.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}
+                </div>
+            </div>
+            ${actionHtml}
+        </div>
+    `;
 }
 
 const PROFILE_LANGUAGE_CODES = [
@@ -855,37 +905,84 @@ function renderStats() {
 }
 
 function renderBrowserKernelPanel() {
-    if (!browserKernelStatus || !browserInstalledSelect || !browserAvailableSelect) {
+    if (!browserKernelStatus) {
         return;
     }
 
     const browser = getBrowserRuntimeState();
     const installed = Array.isArray(browser.installed) ? browser.installed : [];
     const available = Array.isArray(browser.available) ? browser.available : [];
+    const previewAvailable = available.slice(0, BROWSER_AVAILABLE_PREVIEW_LIMIT);
+    const installedIds = new Set(installed.map((item) => item.id));
 
     const statusText = browser.activeLabel
-        ? `${browser.activeLabel}${browser.loading ? ' · refreshing' : ''}`
-        : (browser.loading ? 'Loading official Chromium snapshots...' : 'No Chromium installed');
-    browserKernelStatus.textContent = browser.error
+        ? `${browser.activeLabel}${browser.loading ? ' · 刷新中' : ''}`
+        : (browser.loading ? '正在加载 Chromium 版本...' : '未安装 Chromium 内核');
+    const fullStatusText = browser.error
         ? `${statusText} · ${browser.error}`
         : statusText;
 
-    browserInstalledSelect.innerHTML = installed.length
-        ? installed.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || item.id)}</option>`).join('')
-        : '<option value="">No installed versions</option>';
-    browserInstalledSelect.value = installed.some((item) => item.id === browser.activeVersion)
-        ? browser.activeVersion
-        : (installed[0]?.id || '');
-
-    browserAvailableSelect.innerHTML = available.length
-        ? available.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label || item.id)}</option>`).join('')
-        : '<option value="">No remote versions</option>';
-    if (available.length && !browserAvailableSelect.value) {
-        browserAvailableSelect.value = available[0].id;
+    browserKernelStatus.textContent = fullStatusText;
+    if (browserKernelMenuStatus) {
+        browserKernelMenuStatus.textContent = browser.activeLabel || (browser.loading ? '刷新中...' : '未安装');
+    }
+    if (browserKernelMenuHeadline) {
+        browserKernelMenuHeadline.textContent = fullStatusText;
+    }
+    if (browserKernelMenuBtn) {
+        browserKernelMenuBtn.title = fullStatusText;
+        browserKernelMenuBtn.classList.toggle('is-loading', browser.loading);
+    }
+    if (browserKernelMenuBadge) {
+        const hasLatestMissing = !!previewAvailable[0] && !installedIds.has(previewAvailable[0].id);
+        browserKernelMenuBadge.hidden = !hasLatestMissing;
+        browserKernelMenuBadge.textContent = hasLatestMissing ? '1' : '';
+    }
+    if (browserInstalledList) {
+        browserInstalledList.innerHTML = installed.length
+            ? installed.map((item) => renderBrowserKernelItem({
+                title: item.label || `r${item.id}`,
+                meta: [item.installedAt ? `安装于 ${formatDate(item.installedAt)}` : '已安装'],
+                tags: item.id === browser.activeVersion ? [{ label: '使用中', type: 'active' }] : [],
+                actionLabel: item.id === browser.activeVersion ? '当前' : '切换',
+                actionKind: item.id === browser.activeVersion ? 'none' : 'activate',
+                revision: item.id,
+                disabled: browser.loading || item.id === browser.activeVersion,
+                active: item.id === browser.activeVersion
+            })).join('')
+            : renderBrowserKernelEmpty('还没有已安装的内核版本。');
+    }
+    if (browserAvailableListHint) {
+        browserAvailableListHint.textContent = available.length > BROWSER_AVAILABLE_PREVIEW_LIMIT
+            ? `仅显示最新 ${BROWSER_AVAILABLE_PREVIEW_LIMIT} 个`
+            : '';
+    }
+    if (browserAvailableList) {
+        browserAvailableList.innerHTML = previewAvailable.length
+            ? previewAvailable.map((item) => {
+                const isInstalled = installedIds.has(item.id);
+                const isActive = item.id === browser.activeVersion;
+                const tags = [];
+                if (item.latest) tags.push({ label: '最新' });
+                if (isActive) {
+                    tags.push({ label: '使用中', type: 'active' });
+                } else if (isInstalled) {
+                    tags.push({ label: '已安装' });
+                }
+                return renderBrowserKernelItem({
+                    title: item.label || `r${item.id}`,
+                    meta: [isInstalled ? '已下载，可直接切换' : '官方快照版本'],
+                    tags,
+                    actionLabel: isActive ? '当前' : (isInstalled ? '切换' : '下载'),
+                    actionKind: isActive ? 'none' : (isInstalled ? 'activate' : 'install'),
+                    revision: item.id,
+                    disabled: browser.loading || isActive,
+                    active: isActive
+                });
+            }).join('')
+            : renderBrowserKernelEmpty(browser.loading ? '正在加载官方版本列表...' : (browser.error || '暂无可用版本'));
     }
 
-    activateBrowserVersionBtn.disabled = !browserInstalledSelect.value || browserInstalledSelect.value === browser.activeVersion;
-    installBrowserVersionBtn.disabled = !browserAvailableSelect.value || browser.loading;
     refreshBrowserCatalogBtn.disabled = browser.loading;
     openBrowserInstallDirBtn.disabled = !browser.installDir;
 }
@@ -2973,31 +3070,39 @@ importCrxExtensionBtn.addEventListener('click', async () => {
     }
 });
 
+browserKernelMenuBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setBrowserKernelMenuOpen(!browserKernelMenuOpen);
+});
+
+browserKernelMenu?.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const actionButton = event.target.closest('[data-browser-kernel-action]');
+    if (!actionButton) {
+        return;
+    }
+
+    const action = actionButton.dataset.browserKernelAction || '';
+    const revision = actionButton.dataset.revision || '';
+    if (!revision || action === 'none') {
+        return;
+    }
+
+    if (action === 'install') {
+        const browser = await window.xbrowser.installBrowserVersion({ revision });
+        showToast(browser?.activeVersion ? `Installed and activated Chromium r${browser.activeVersion}` : `Installed Chromium r${revision}`);
+        return;
+    }
+
+    if (action === 'activate') {
+        const browser = await window.xbrowser.activateBrowserVersion({ revision });
+        showToast(browser?.activeVersion ? `Activated Chromium r${browser.activeVersion}` : `Activated Chromium r${revision}`);
+    }
+});
+
 refreshBrowserCatalogBtn?.addEventListener('click', async () => {
     const browser = await window.xbrowser.refreshBrowserCatalog();
     showToast(browser?.error ? `Chromium list refresh failed: ${browser.error}` : 'Chromium versions refreshed');
-});
-
-installBrowserVersionBtn?.addEventListener('click', async () => {
-    const revision = browserAvailableSelect?.value || '';
-    if (!revision) {
-        showToast('Select a Chromium revision first');
-        return;
-    }
-
-    const browser = await window.xbrowser.installBrowserVersion({ revision });
-    showToast(browser?.activeVersion ? `Installed and activated Chromium r${browser.activeVersion}` : `Installed Chromium r${revision}`);
-});
-
-activateBrowserVersionBtn?.addEventListener('click', async () => {
-    const revision = browserInstalledSelect?.value || '';
-    if (!revision) {
-        showToast('Select an installed Chromium revision first');
-        return;
-    }
-
-    const browser = await window.xbrowser.activateBrowserVersion({ revision });
-    showToast(browser?.activeVersion ? `Activated Chromium r${browser.activeVersion}` : `Activated Chromium r${revision}`);
 });
 
 openBrowserInstallDirBtn?.addEventListener('click', () => {
@@ -3006,6 +3111,18 @@ openBrowserInstallDirBtn?.addEventListener('click', () => {
 
 document.getElementById('openDataDirBtn').addEventListener('click', () => {
     window.xbrowser.openDataDir();
+});
+
+document.addEventListener('click', (event) => {
+    if (!event.target.closest('.topbar-kernel-wrap')) {
+        setBrowserKernelMenuOpen(false);
+    }
+});
+
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        setBrowserKernelMenuOpen(false);
+    }
 });
 
 updateActionBtn?.addEventListener('click', async () => {

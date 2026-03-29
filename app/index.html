@@ -58,22 +58,6 @@
                 <div class="sidebar-divider"></div>
                 <div class="sidebar-label">Chromium Kernel</div>
                 <div id="browserKernelStatus" class="sidebar-value">Loading browser versions...</div>
-                <label class="sidebar-field">
-                    <span>Installed</span>
-                    <select id="browserInstalledSelect"></select>
-                </label>
-                <div class="sidebar-inline-actions">
-                    <button id="activateBrowserVersionBtn" class="small-btn">Activate</button>
-                    <button id="openBrowserInstallDirBtn" class="small-btn">Kernel Dir</button>
-                </div>
-                <label class="sidebar-field">
-                    <span>Official Snapshots</span>
-                    <select id="browserAvailableSelect"></select>
-                </label>
-                <div class="sidebar-inline-actions">
-                    <button id="refreshBrowserCatalogBtn" class="small-btn">Refresh</button>
-                    <button id="installBrowserVersionBtn" class="small-btn">Download</button>
-                </div>
                 <button id="openDataDirBtn" class="ghost-btn" style="width: 100%;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                     打开数据目录
@@ -89,6 +73,42 @@
                 </div>
                 <div class="topbar-actions">
                     <div id="topbarHint" class="topbar-hint">正在初始化...</div>
+                    <div class="topbar-kernel-wrap">
+                        <button id="browserKernelMenuBtn" class="ghost-btn topbar-kernel-btn" type="button" aria-expanded="false">
+                            <span class="topbar-kernel-btn-copy">
+                                <span class="topbar-kernel-btn-title">内核</span>
+                                <span id="browserKernelMenuStatus" class="topbar-kernel-btn-meta">加载中...</span>
+                            </span>
+                            <span id="browserKernelMenuBadge" class="topbar-kernel-badge" hidden>1</span>
+                        </button>
+                        <div id="browserKernelMenu" class="topbar-kernel-menu" hidden>
+                            <div class="topbar-kernel-menu-head">
+                                <div>
+                                    <div class="topbar-kernel-menu-kicker">Chromium Kernel</div>
+                                    <div id="browserKernelMenuHeadline" class="topbar-kernel-menu-title">加载中...</div>
+                                </div>
+                                <div class="topbar-kernel-menu-actions">
+                                    <button id="refreshBrowserCatalogBtn" class="small-btn" type="button">刷新</button>
+                                    <button id="openBrowserInstallDirBtn" class="small-btn" type="button">目录</button>
+                                </div>
+                            </div>
+                            <div class="topbar-kernel-menu-body">
+                                <section class="topbar-kernel-section">
+                                    <div class="topbar-kernel-section-head">
+                                        <span>已安装</span>
+                                    </div>
+                                    <div id="browserInstalledList" class="topbar-kernel-list"></div>
+                                </section>
+                                <section class="topbar-kernel-section">
+                                    <div class="topbar-kernel-section-head">
+                                        <span>最新 5 个版本</span>
+                                        <small id="browserAvailableListHint" class="topbar-kernel-section-hint"></small>
+                                    </div>
+                                    <div id="browserAvailableList" class="topbar-kernel-list"></div>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
                     <button id="updateActionBtn" class="ghost-btn topbar-update-btn" type="button" hidden></button>
                 </div>
             </header>
