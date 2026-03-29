@@ -138,6 +138,19 @@ const runningProfiles = new Map();
 let agentController = null;
 let syncController = null;
 let updaterController = null;
+
+function createEmptyBrowserInstallState() {
+    return {
+        installing: false,
+        installRevision: '',
+        installStage: '',
+        installProgress: 0,
+        installTransferred: 0,
+        installTotal: 0,
+        installError: ''
+    };
+}
+
 let browserCatalogState = {
     source: OFFICIAL_BROWSER_SOURCE_ID,
     sourceName: OFFICIAL_BROWSER_SOURCE_NAME,
@@ -145,7 +158,8 @@ let browserCatalogState = {
     refreshedAt: 0,
     latestVersion: '',
     available: [],
-    error: ''
+    error: '',
+    ...createEmptyBrowserInstallState()
 };
 
 function getDefaultProjectRecord() {
@@ -3909,6 +3923,33 @@ async function saveAll() {
     ]);
 }
 
+function toBrowserInstallProgress(stage, percent, fallback = 0) {
+    const normalized = Number.isFinite(Number(percent)) ? Math.max(0, Math.min(100, Math.round(Number(percent)))) : null;
+    if (stage === 'prepare') {
+        return 2;
+    }
+    if (stage === 'download') {
+        if (normalized === null) {
+            return Math.max(fallback, 8);
+        }
+        return Math.max(8, Math.min(90, Math.round(8 + (normalized * 0.82))));
+    }
+    if (stage === 'extract') {
+        return 94;
+    }
+    if (stage === 'finalize') {
+        return 98;
+    }
+    if (stage === 'completed') {
+        return 100;
+    }
+    return Math.max(0, Math.min(100, fallback));
+}
+
+function resetBrowserInstallState() {
+    return createEmptyBrowserInstallState();
+}
+
 function getBrowserRuntimeState() {
     const activeVersion = String(settings?.browser?.activeVersion || '').trim();
     const installed = listInstalledBrowsers(BASE_DIR).map((item) => ({
@@ -3930,6 +3971,13 @@ function getBrowserRuntimeState() {
         activePath: activeBrowser?.rootDir || '',
         binary: resolveBrowserExecutable(BASE_DIR, { activeVersion }),
         installDir: getOfficialBrowserRoot(BASE_DIR),
+        installing: !!browserCatalogState.installing,
+        installRevision: browserCatalogState.installRevision || '',
+        installStage: browserCatalogState.installStage || '',
+        installProgress: Number(browserCatalogState.installProgress || 0),
+        installTransferred: Number(browserCatalogState.installTransferred || 0),
+        installTotal: Number(browserCatalogState.installTotal || 0),
+        installError: browserCatalogState.installError || '',
         installed
     };
 }
@@ -4700,11 +4748,83 @@ app.whenReady().then(async () => {
         if (!revision) {
             throw new Error('Chromium revision is required');
         }
-        await installOfficialBrowserRevision(BASE_DIR, revision, { force: false });
-        settings.browser.activeVersion = revision;
-        await store.saveSettings(settings);
+        if (browserCatalogState.installing) {
+            if (browserCatalogState.installRevision === revision) {
+                return getBrowserRuntimeState();
+            }
+            throw new Error(`Chromium r${browserCatalogState.installRevision} is still installing`);
+        }
+
+        let lastStage = '';
+        let lastProgress = -1;
+        let lastTotal = -1;
+        let lastUpdateAt = 0;
+
+        browserCatalogState = {
+            ...browserCatalogState,
+            ...resetBrowserInstallState(),
+            installing: true,
+            installRevision: revision,
+            installStage: 'prepare',
+            installProgress: 2
+        };
         notifyState();
-        return getBrowserRuntimeState();
+
+        try {
+            await installOfficialBrowserRevision(BASE_DIR, revision, {
+                force: false,
+                onProgress: (progressPayload = {}) => {
+                    const stage = String(progressPayload.phase || '').trim() || 'download';
+                    const installProgress = toBrowserInstallProgress(stage, progressPayload.percent, browserCatalogState.installProgress);
+                    const transferred = Math.max(0, Number(progressPayload.transferred) || 0);
+                    const total = Math.max(0, Number(progressPayload.total) || 0);
+                    const now = Date.now();
+                    const shouldNotify = stage !== lastStage
+                        || installProgress !== lastProgress
+                        || total !== lastTotal
+                        || (stage === 'download' && transferred > 0 && now - lastUpdateAt >= 200);
+
+                    if (!shouldNotify) {
+                        return;
+                    }
+
+                    lastStage = stage;
+                    lastProgress = installProgress;
+                    lastTotal = total;
+                    lastUpdateAt = now;
+
+                    browserCatalogState = {
+                        ...browserCatalogState,
+                        installing: stage !== 'completed',
+                        installRevision: revision,
+                        installStage: stage,
+                        installProgress,
+                        installTransferred: transferred,
+                        installTotal: total,
+                        installError: ''
+                    };
+                    notifyState();
+                }
+            });
+            settings.browser.activeVersion = revision;
+            await store.saveSettings(settings);
+            browserCatalogState = {
+                ...browserCatalogState,
+                ...resetBrowserInstallState()
+            };
+            notifyState();
+            return getBrowserRuntimeState();
+        } catch (error) {
+            browserCatalogState = {
+                ...browserCatalogState,
+                ...resetBrowserInstallState(),
+                installRevision: revision,
+                installStage: 'error',
+                installError: error?.message || String(error || 'Failed to install Chromium')
+            };
+            notifyState();
+            throw error;
+        }
     });
     ipcMain.handle('browser:activate', async (event, payload) => {
         const revision = String(payload?.revision || '').trim();
@@ -4717,6 +4837,10 @@ app.whenReady().then(async () => {
         }
         settings.browser.activeVersion = revision;
         await store.saveSettings(settings);
+        browserCatalogState = {
+            ...browserCatalogState,
+            installError: ''
+        };
         notifyState();
         return getBrowserRuntimeState();
     });

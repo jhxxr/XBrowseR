@@ -95,6 +95,13 @@ function createEmptyBrowserRuntimeState() {
         activePath: '',
         binary: '',
         installDir: '',
+        installing: false,
+        installRevision: '',
+        installStage: '',
+        installProgress: 0,
+        installTransferred: 0,
+        installTotal: 0,
+        installError: '',
         installed: []
     };
 }
@@ -268,6 +275,66 @@ function renderBrowserKernelEmpty(message) {
     return `<div class="topbar-kernel-empty">${escapeHtml(message)}</div>`;
 }
 
+function formatByteSize(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value <= 0) {
+        return '0 B';
+    }
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const exponent = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+    const amount = value / (1024 ** exponent);
+    return `${amount >= 100 || exponent === 0 ? Math.round(amount) : amount.toFixed(1)} ${units[exponent]}`;
+}
+
+function getBrowserInstallProgress(browser) {
+    return Math.max(0, Math.min(100, Math.round(Number(browser?.installProgress) || 0)));
+}
+
+function getBrowserInstallSummary(browser, revision = browser?.installRevision || '') {
+    const normalizedRevision = String(revision || browser?.installRevision || '').trim();
+    const revisionLabel = normalizedRevision ? `r${normalizedRevision}` : 'Chromium';
+    const progress = getBrowserInstallProgress(browser);
+    const transferred = Math.max(0, Number(browser?.installTransferred) || 0);
+    const total = Math.max(0, Number(browser?.installTotal) || 0);
+
+    if (browser?.installError) {
+        return `安装失败: ${browser.installError}`;
+    }
+
+    switch (browser?.installStage) {
+    case 'prepare':
+        return `准备下载 Chromium ${revisionLabel}`;
+    case 'download':
+        if (total > 0) {
+            return `下载 Chromium ${revisionLabel} ${progress}% (${formatByteSize(transferred)} / ${formatByteSize(total)})`;
+        }
+        return `正在下载 Chromium ${revisionLabel}`;
+    case 'extract':
+        return `正在解压 Chromium ${revisionLabel}`;
+    case 'finalize':
+        return `正在完成 Chromium ${revisionLabel} 安装`;
+    case 'completed':
+        return `Chromium ${revisionLabel} 已安装`;
+    default:
+        return `正在安装 Chromium ${revisionLabel}`;
+    }
+}
+
+function getBrowserInstallActionLabel(browser) {
+    const progress = getBrowserInstallProgress(browser);
+    if (browser?.installStage === 'download' && progress > 0) {
+        return `${progress}%`;
+    }
+    if (browser?.installStage === 'extract') {
+        return '解压中';
+    }
+    if (browser?.installStage === 'finalize') {
+        return '收尾中';
+    }
+    return '安装中';
+}
+
 function renderBrowserKernelItem({
     title = '',
     meta = [],
@@ -276,11 +343,26 @@ function renderBrowserKernelItem({
     actionKind = '',
     revision = '',
     disabled = false,
-    active = false
+    active = false,
+    progress = null
 } = {}) {
     const metaText = (Array.isArray(meta) ? meta : [meta]).filter(Boolean);
     const actionHtml = actionLabel
         ? `<button type="button" class="small-btn topbar-kernel-item-action" data-browser-kernel-action="${escapeHtml(actionKind)}" data-revision="${escapeHtml(revision)}" ${disabled ? 'disabled' : ''}>${escapeHtml(actionLabel)}</button>`
+        : '';
+    const progressValue = progress ? Math.max(0, Math.min(100, Math.round(Number(progress.percent) || 0))) : 0;
+    const progressHtml = progress
+        ? `
+            <div class="topbar-kernel-progress">
+                <div class="topbar-kernel-progress-top">
+                    <span class="topbar-kernel-progress-label">${escapeHtml(progress.label || '')}</span>
+                    <span class="topbar-kernel-progress-percent">${progressValue}%</span>
+                </div>
+                <div class="topbar-kernel-progress-bar">
+                    <div class="topbar-kernel-progress-fill" style="width:${progressValue}%"></div>
+                </div>
+            </div>
+        `
         : '';
 
     return `
@@ -291,6 +373,7 @@ function renderBrowserKernelItem({
                     ${tags.map((tag) => `<span class="topbar-kernel-tag ${tag.type === 'active' ? 'is-active' : ''}">${escapeHtml(tag.label)}</span>`).join('')}
                     ${metaText.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}
                 </div>
+                ${progressHtml}
             </div>
             ${actionHtml}
         </div>
@@ -914,27 +997,32 @@ function renderBrowserKernelPanel() {
     const available = Array.isArray(browser.available) ? browser.available : [];
     const previewAvailable = available.slice(0, BROWSER_AVAILABLE_PREVIEW_LIMIT);
     const installedIds = new Set(installed.map((item) => item.id));
-
-    const statusText = browser.activeLabel
-        ? `${browser.activeLabel}${browser.loading ? ' · 刷新中' : ''}`
-        : (browser.loading ? '正在加载 Chromium 版本...' : '未安装 Chromium 内核');
-    const fullStatusText = browser.error
-        ? `${statusText} · ${browser.error}`
-        : statusText;
+    const installSummary = browser.installing ? getBrowserInstallSummary(browser) : '';
+    const statusText = browser.installing
+        ? installSummary
+        : (browser.activeLabel
+            ? `${browser.activeLabel}${browser.loading ? ' · 刷新中' : ''}`
+            : (browser.loading ? '正在加载 Chromium 版本...' : '未安装 Chromium 内核'));
+    const fullStatusText = browser.installError
+        ? `${statusText} · ${browser.installError}`
+        : (browser.error ? `${statusText} · ${browser.error}` : statusText);
+    const buttonStatusText = browser.installing
+        ? `${browser.installRevision ? `r${browser.installRevision} ` : ''}${getBrowserInstallProgress(browser)}%`
+        : (browser.activeLabel || (browser.loading ? '刷新中...' : '未安装'));
 
     browserKernelStatus.textContent = fullStatusText;
     if (browserKernelMenuStatus) {
-        browserKernelMenuStatus.textContent = browser.activeLabel || (browser.loading ? '刷新中...' : '未安装');
+        browserKernelMenuStatus.textContent = buttonStatusText;
     }
     if (browserKernelMenuHeadline) {
         browserKernelMenuHeadline.textContent = fullStatusText;
     }
     if (browserKernelMenuBtn) {
         browserKernelMenuBtn.title = fullStatusText;
-        browserKernelMenuBtn.classList.toggle('is-loading', browser.loading);
+        browserKernelMenuBtn.classList.toggle('is-loading', browser.loading || browser.installing);
     }
     if (browserKernelMenuBadge) {
-        const hasLatestMissing = !!previewAvailable[0] && !installedIds.has(previewAvailable[0].id);
+        const hasLatestMissing = !!previewAvailable[0] && !installedIds.has(previewAvailable[0].id) && !browser.installing;
         browserKernelMenuBadge.hidden = !hasLatestMissing;
         browserKernelMenuBadge.textContent = hasLatestMissing ? '1' : '';
     }
@@ -947,7 +1035,7 @@ function renderBrowserKernelPanel() {
                 actionLabel: item.id === browser.activeVersion ? '当前' : '切换',
                 actionKind: item.id === browser.activeVersion ? 'none' : 'activate',
                 revision: item.id,
-                disabled: browser.loading || item.id === browser.activeVersion,
+                disabled: browser.loading || browser.installing || item.id === browser.activeVersion,
                 active: item.id === browser.activeVersion
             })).join('')
             : renderBrowserKernelEmpty('还没有已安装的内核版本。');
@@ -962,6 +1050,7 @@ function renderBrowserKernelPanel() {
             ? previewAvailable.map((item) => {
                 const isInstalled = installedIds.has(item.id);
                 const isActive = item.id === browser.activeVersion;
+                const isInstalling = browser.installing && item.id === browser.installRevision;
                 const tags = [];
                 if (item.latest) tags.push({ label: '最新' });
                 if (isActive) {
@@ -971,19 +1060,23 @@ function renderBrowserKernelPanel() {
                 }
                 return renderBrowserKernelItem({
                     title: item.label || `r${item.id}`,
-                    meta: [isInstalled ? '已下载，可直接切换' : '官方快照版本'],
+                    meta: [isInstalling ? '下载完成后将自动设为当前内核' : (isInstalled ? '已下载，可直接切换' : '官方快照版本')],
                     tags,
-                    actionLabel: isActive ? '当前' : (isInstalled ? '切换' : '下载'),
-                    actionKind: isActive ? 'none' : (isInstalled ? 'activate' : 'install'),
+                    actionLabel: isInstalling ? getBrowserInstallActionLabel(browser) : (isActive ? '当前' : (isInstalled ? '切换' : '下载')),
+                    actionKind: isInstalling ? 'none' : (isActive ? 'none' : (isInstalled ? 'activate' : 'install')),
                     revision: item.id,
-                    disabled: browser.loading || isActive,
-                    active: isActive
+                    disabled: browser.loading || browser.installing || isActive,
+                    active: isActive,
+                    progress: isInstalling ? {
+                        label: getBrowserInstallSummary(browser, item.id),
+                        percent: getBrowserInstallProgress(browser)
+                    } : null
                 });
             }).join('')
-            : renderBrowserKernelEmpty(browser.loading ? '正在加载官方版本列表...' : (browser.error || '暂无可用版本'));
+            : renderBrowserKernelEmpty(browser.loading ? '正在加载官方版本列表...' : (browser.installError || browser.error || '暂无可用版本'));
     }
 
-    refreshBrowserCatalogBtn.disabled = browser.loading;
+    refreshBrowserCatalogBtn.disabled = browser.loading || browser.installing;
     openBrowserInstallDirBtn.disabled = !browser.installDir;
 }
 
@@ -3088,15 +3181,19 @@ browserKernelMenu?.addEventListener('click', async (event) => {
         return;
     }
 
-    if (action === 'install') {
-        const browser = await window.xbrowser.installBrowserVersion({ revision });
-        showToast(browser?.activeVersion ? `Installed and activated Chromium r${browser.activeVersion}` : `Installed Chromium r${revision}`);
-        return;
-    }
+    try {
+        if (action === 'install') {
+            const browser = await window.xbrowser.installBrowserVersion({ revision });
+            showToast(browser?.activeVersion ? `Installed and activated Chromium r${browser.activeVersion}` : `Installed Chromium r${revision}`);
+            return;
+        }
 
-    if (action === 'activate') {
-        const browser = await window.xbrowser.activateBrowserVersion({ revision });
-        showToast(browser?.activeVersion ? `Activated Chromium r${browser.activeVersion}` : `Activated Chromium r${revision}`);
+        if (action === 'activate') {
+            const browser = await window.xbrowser.activateBrowserVersion({ revision });
+            showToast(browser?.activeVersion ? `Activated Chromium r${browser.activeVersion}` : `Activated Chromium r${revision}`);
+        }
+    } catch (error) {
+        showToast(error?.message || `Chromium r${revision} operation failed`);
     }
 });
 
