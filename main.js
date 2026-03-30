@@ -162,6 +162,24 @@ let browserCatalogState = {
     ...createEmptyBrowserInstallState()
 };
 
+function listManagedBrowsers() {
+    return listInstalledBrowsers(DATA_ROOT_DIR);
+}
+
+function resolveManagedBrowserExecutable(activeVersion = '') {
+    const normalizedActiveVersion = String(activeVersion || '').trim();
+    const managedExecutable = resolveBrowserExecutable(DATA_ROOT_DIR, { activeVersion: normalizedActiveVersion });
+    if (managedExecutable) {
+        return managedExecutable;
+    }
+
+    if (DATA_ROOT_DIR !== BASE_DIR) {
+        return resolveBrowserExecutable(BASE_DIR, { activeVersion: normalizedActiveVersion });
+    }
+
+    return '';
+}
+
 function getDefaultProjectRecord() {
     return {
         id: DEFAULT_PROJECT_ID,
@@ -3952,7 +3970,7 @@ function resetBrowserInstallState() {
 
 function getBrowserRuntimeState() {
     const activeVersion = String(settings?.browser?.activeVersion || '').trim();
-    const installed = listInstalledBrowsers(BASE_DIR).map((item) => ({
+    const installed = listManagedBrowsers().map((item) => ({
         ...item,
         active: item.id === activeVersion
     }));
@@ -3969,8 +3987,8 @@ function getBrowserRuntimeState() {
         activeVersion: activeBrowser?.id || activeVersion,
         activeLabel: activeBrowser?.label || '',
         activePath: activeBrowser?.rootDir || '',
-        binary: resolveBrowserExecutable(BASE_DIR, { activeVersion }),
-        installDir: getOfficialBrowserRoot(BASE_DIR),
+        binary: resolveManagedBrowserExecutable(activeVersion),
+        installDir: getOfficialBrowserRoot(DATA_ROOT_DIR),
         installing: !!browserCatalogState.installing,
         installRevision: browserCatalogState.installRevision || '',
         installStage: browserCatalogState.installStage || '',
@@ -4032,7 +4050,7 @@ function buildState() {
             apiUrl: settings?.api?.enabled ? `http://127.0.0.1:${settings.api.port}` : '',
             mihomoBinary: getBinaryPath(BASE_DIR),
             mihomoReady: fs.existsSync(getBinaryPath(BASE_DIR)),
-            browserBinary: resolveBrowserExecutable(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' }),
+            browserBinary: resolveManagedBrowserExecutable(settings?.browser?.activeVersion || ''),
             browser: getBrowserRuntimeState(),
             running: Array.from(runningProfiles.entries()).map(([id, runtime]) => ({
                 id,
@@ -4216,16 +4234,16 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
 
     reportLaunchProgress(profile, requestId, 6, 'prepare', '校验浏览器环境');
 
-    let browserBinary = resolveBrowserExecutable(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
+    let browserBinary = resolveManagedBrowserExecutable(settings?.browser?.activeVersion || '');
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 8, 'browser-download', '准备内置浏览器内核');
         await ensureBundledBrowser(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
-        const installedBrowsers = listInstalledBrowsers(BASE_DIR);
+        const installedBrowsers = listManagedBrowsers();
         if (!settings.browser.activeVersion && installedBrowsers[0]) {
             settings.browser.activeVersion = installedBrowsers[0].id;
             await store.saveSettings(settings);
         }
-        browserBinary = resolveBrowserExecutable(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
+        browserBinary = resolveManagedBrowserExecutable(settings?.browser?.activeVersion || '');
     }
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 0, 'error', '未找到 Chrome 或 Chromium', { error: true, done: true });
@@ -4694,7 +4712,7 @@ app.whenReady().then(async () => {
     await store.saveSettings(settings);
     await accountStore.saveAccounts(accounts);
 
-    const installedBrowsers = listInstalledBrowsers(BASE_DIR);
+    const installedBrowsers = listManagedBrowsers();
     if (!settings.browser.activeVersion && installedBrowsers[0]) {
         settings.browser.activeVersion = installedBrowsers[0].id;
         await store.saveSettings(settings);
@@ -4771,7 +4789,7 @@ app.whenReady().then(async () => {
         notifyState();
 
         try {
-            await installOfficialBrowserRevision(BASE_DIR, revision, {
+            await installOfficialBrowserRevision(DATA_ROOT_DIR, revision, {
                 force: false,
                 onProgress: (progressPayload = {}) => {
                     const stage = String(progressPayload.phase || '').trim() || 'download';
@@ -4831,7 +4849,7 @@ app.whenReady().then(async () => {
         if (!revision) {
             throw new Error('Chromium revision is required');
         }
-        const installed = listInstalledBrowsers(BASE_DIR).find((item) => item.id === revision);
+        const installed = listManagedBrowsers().find((item) => item.id === revision);
         if (!installed) {
             throw new Error(`Chromium revision not installed: ${revision}`);
         }
@@ -4844,7 +4862,7 @@ app.whenReady().then(async () => {
         notifyState();
         return getBrowserRuntimeState();
     });
-    ipcMain.handle('browser:open-dir', async () => shell.openPath(getOfficialBrowserRoot(BASE_DIR)));
+    ipcMain.handle('browser:open-dir', async () => shell.openPath(getOfficialBrowserRoot(DATA_ROOT_DIR)));
     ipcMain.handle('app:update:check', async () => {
         if (!updaterController) {
             return createEmptyUpdaterState();
