@@ -83,6 +83,9 @@ const batchBoard = document.getElementById('batchBoard');
 const exportBatchBtn = document.getElementById('exportBatchBtn');
 const singleBoard = document.getElementById('singleBoard');
 const singleTaskCard = document.getElementById('singleTaskCard');
+const manualHandoffBanner = document.getElementById('manualHandoffBanner');
+const manualHandoffText = document.getElementById('manualHandoffText');
+const resumeAfterHandoffBtn = document.getElementById('resumeAfterHandoffBtn');
 const agentComposerForm = document.getElementById('agentComposerForm');
 const agentComposerInput = document.getElementById('agentComposerInput');
 const sendAgentMessageBtn = document.getElementById('sendAgentMessageBtn');
@@ -173,6 +176,38 @@ function getBatchState() {
     return getAgentRuntime().batch || createEmptyAgentRuntimeState().batch;
 }
 
+function getManualHandoffEvent(events = []) {
+    const items = Array.isArray(events) ? events : [];
+    let handoffEntry = null;
+
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+        const entry = items[index];
+        if (entry?.code === 'MANUAL_HANDOFF') {
+            handoffEntry = entry;
+            break;
+        }
+        if (
+            (entry?.kind === 'message' && (entry.role === 'user' || entry.role === 'assistant'))
+            || entry?.kind === 'tool'
+            || (entry?.kind === 'status' && entry?.code !== 'MANUAL_HANDOFF')
+        ) {
+            return null;
+        }
+    }
+
+    return handoffEntry;
+}
+
+function buildResumeAfterHandoffMessage(handoffEvent) {
+    const reason = String(handoffEvent?.message || '').trim();
+    return [
+        '我已经完成人工接管步骤。',
+        reason ? `刚才暂停原因：${reason}` : '',
+        '请先读取当前页面状态，确认是否仍需人工处理。',
+        '不要尝试处理验证码、登录或支付，只在安全时继续剩余任务。'
+    ].filter(Boolean).join('\n');
+}
+
 function getBatchLaunchOptions(batch = getBatchState()) {
     return {
         concurrency: Math.max(1, Math.min(5, Number(agentBatchConcurrencyInput?.value) || Number(batch.concurrency) || 1)),
@@ -253,6 +288,7 @@ function getTaskStatusLabel(status) {
 }
 
 function getSingleTaskSummary(runtimeAgent) {
+    const handoffEvent = getManualHandoffEvent(runtimeAgent.events);
     const lastAssistant = runtimeAgent.events
         .slice()
         .reverse()
@@ -264,8 +300,8 @@ function getSingleTaskSummary(runtimeAgent) {
 
     return {
         title: runtimeAgent.profileName || '当前没有活动会话',
-        status: runtimeAgent.running ? 'running' : (runtimeAgent.sessionId ? 'ready' : 'queued'),
-        summary: lastAssistant?.content || lastStatus?.message || '启动单窗口会话后，这里会显示最近一次执行摘要。',
+        status: runtimeAgent.running ? 'running' : (handoffEvent ? 'stopped' : (runtimeAgent.sessionId ? 'ready' : 'queued')),
+        summary: handoffEvent?.message || lastAssistant?.content || lastStatus?.message || '启动单窗口会话后，这里会显示最近一次执行摘要。',
         pageUrl: runtimeAgent.pageUrl || '-',
     };
 }
@@ -292,6 +328,7 @@ function renderSingleBoard() {
     const runtimeAgent = getAgentRuntime();
     const summary = getSingleTaskSummary(runtimeAgent);
     const statusLabel = getTaskStatusLabel(summary.status);
+    const handoffEvent = getManualHandoffEvent(runtimeAgent.events);
 
     singleTaskCard.innerHTML = `
         <div class="task-card-head">
@@ -307,6 +344,12 @@ function renderSingleBoard() {
             <span class="task-chip">${escapeHtml(runtimeAgent.model || '未绑定模型')}</span>
         </div>
     `;
+
+    if (manualHandoffBanner && manualHandoffText && resumeAfterHandoffBtn) {
+        manualHandoffBanner.classList.toggle('hidden', !handoffEvent);
+        manualHandoffText.textContent = handoffEvent?.message || '当前窗口已暂停自动操作，完成人工步骤后再继续。';
+        resumeAfterHandoffBtn.disabled = !handoffEvent || runtimeAgent.running || !runtimeAgent.sessionId;
+    }
 }
 
 function getDetailPayload() {
@@ -338,9 +381,10 @@ function getDetailPayload() {
         };
     }
 
+    const singleHandoffEvent = getManualHandoffEvent(runtimeAgent.events);
     return {
         title: runtimeAgent.profileName || '单窗口会话',
-        badge: runtimeAgent.running ? '执行中' : (runtimeAgent.sessionId ? '待命中' : '未启动'),
+        badge: runtimeAgent.running ? '执行中' : (singleHandoffEvent ? '等待人工接管' : (runtimeAgent.sessionId ? '待命中' : '未启动')),
         summary: getSingleTaskSummary(runtimeAgent).summary,
         model: runtimeAgent.model || getActiveProvider()?.model || '-',
         profile: runtimeAgent.profileName || '-',
@@ -530,6 +574,9 @@ function renderStatusLegacy() {
     agentComposerInput.placeholder = sendAgentMessageBtn.disabled
         ? '请先启动单窗口会话，或等待当前执行完成'
         : '继续告诉 Agent 这个窗口接下来要做什么';
+    if (resumeAfterHandoffBtn) {
+        resumeAfterHandoffBtn.disabled = !singleHandoffEvent || runtimeAgent.running || !runtimeAgent.sessionId;
+    }
 }
 
 function renderBatchOverview() {
@@ -660,6 +707,7 @@ function renderLaunchOptions() {
 function renderStatus() {
     const runtimeAgent = getAgentRuntime();
     const batch = getBatchState();
+    const singleHandoffEvent = getManualHandoffEvent(runtimeAgent.events);
 
     if (batch.running) {
         agentStatusBadge.textContent = batch.stopRequested ? '正在停止批量任务' : '批量任务执行中';
@@ -667,6 +715,8 @@ function renderStatus() {
         agentStatusBadge.textContent = '批量任务待清空';
     } else if (runtimeAgent.running) {
         agentStatusBadge.textContent = '单窗口执行中';
+    } else if (singleHandoffEvent) {
+        agentStatusBadge.textContent = '等待人工接管';
     } else if (runtimeAgent.sessionId) {
         agentStatusBadge.textContent = '单窗口会话待命';
     } else {
@@ -681,7 +731,9 @@ function renderStatus() {
             : '用于多窗口任务编排';
     } else {
         boardMeta.textContent = runtimeAgent.sessionId
-            ? '面向单个受控窗口的持续会话模式'
+            ? (singleHandoffEvent
+                ? `${singleHandoffEvent.message} 当前窗口已暂停自动操作。`
+                : '面向单个受控窗口的持续会话模式')
             : '高级模式，聚焦接管单一窗口';
     }
 
@@ -941,6 +993,20 @@ interceptUiEvent(agentComposerForm, 'submit', async () => {
 
     await window.xbrowser.sendAgentSessionMessage({ message });
     agentComposerInput.value = '';
+});
+
+interceptUiEvent(resumeAfterHandoffBtn, 'click', async () => {
+    const runtimeAgent = getAgentRuntime();
+    const handoffEvent = getManualHandoffEvent(runtimeAgent.events);
+    if (!runtimeAgent.sessionId || !handoffEvent) {
+        showToast('当前没有等待人工接管的单窗口会话。');
+        return;
+    }
+
+    await window.xbrowser.sendAgentSessionMessage({
+        message: buildResumeAfterHandoffMessage(handoffEvent)
+    });
+    showToast('已通知 Agent 重新检查当前页面并继续。');
 });
 
 interceptUiEvent(stopAgentBtn, 'click', async () => {

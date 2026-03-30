@@ -107,6 +107,13 @@
 
                 <div id="singleBoard" class="single-board hidden">
                     <div id="singleTaskCard" class="task-card single-card"></div>
+                    <div id="manualHandoffBanner" class="handoff-banner hidden">
+                        <div class="handoff-copy">
+                            <div class="handoff-title">等待人工接管</div>
+                            <div id="manualHandoffText" class="handoff-text">当前窗口已暂停自动操作，完成人工步骤后再继续。</div>
+                        </div>
+                        <button id="resumeAfterHandoffBtn" type="button" class="secondary-btn">我已处理，继续</button>
+                    </div>
                     <form id="agentComposerForm" class="composer">
                         <textarea id="agentComposerInput" rows="4" placeholder="继续告诉 Agent 这个窗口接下来要做什么？"></textarea>
                         <button id="sendAgentMessageBtn" type="submit" class="primary-btn">发送</button>

@@ -704,6 +704,28 @@ h2 { font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
     border-color: rgba(255,255,255,0.2);
 }
 
+.small-btn.is-primary {
+    color: #dbeafe;
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.38);
+}
+
+.small-btn.is-primary:hover {
+    background: rgba(59, 130, 246, 0.28);
+    border-color: rgba(96, 165, 250, 0.45);
+}
+
+.small-btn.is-agent {
+    color: #dcfce7;
+    background: rgba(34, 197, 94, 0.16);
+    border-color: rgba(34, 197, 94, 0.34);
+}
+
+.small-btn.is-agent:hover {
+    background: rgba(34, 197, 94, 0.24);
+    border-color: rgba(74, 222, 128, 0.42);
+}
+
 .small-btn.danger {
     color: var(--danger);
     background: rgba(239, 68, 68, 0.1);
@@ -1219,6 +1241,18 @@ tbody tr:last-child td {
     color: var(--accent-hover);
     background: rgba(59, 130, 246, 0.15);
     border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.status-pill.mode-pill.manual {
+    color: #dbeafe;
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.36);
+}
+
+.status-pill.mode-pill.automation {
+    color: #dcfce7;
+    background: rgba(34, 197, 94, 0.18);
+    border-color: rgba(34, 197, 94, 0.34);
 }
 
 /* Action Groups */

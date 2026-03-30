@@ -934,14 +934,26 @@ function mountAgentSettingsFields() {
 }
 
 function renderLaunchProgressInline(profileId) {
+    const runtime = getRunning(profileId);
     const launchState = launchProgressByProfileId.get(profileId);
+    if (runtime) {
+        const modeLabel = runtime.controlMode === 'automation' ? '受控模式' : '手动模式';
+        const modeClass = runtime.controlMode === 'automation' ? 'mode-pill automation' : 'mode-pill manual';
+        return `<span class="status-pill running ${modeClass}">${escapeHtml(modeLabel)}</span>`;
+    }
+
     if (!launchState) {
-        return `<button class="small-btn" data-action="launch-profile" data-id="${profileId}">启动</button>`;
+        return `
+            <button class="small-btn is-primary" data-action="launch-profile-manual" data-id="${profileId}">手动启动</button>
+            <button class="small-btn is-agent" data-action="launch-profile-agent" data-id="${profileId}">Agent 启动</button>
+        `;
     }
 
     const progress = Math.max(0, Math.min(100, Math.round(launchState.progress || 0)));
     const wrapClass = launchState.error ? 'launch-inline is-error' : 'launch-inline';
-    const label = launchState.detail || (launchState.error ? '启动失败' : '启动中');
+    const modeLabel = launchState.controlMode === 'automation' ? 'Agent' : '手动';
+    const baseLabel = launchState.detail || (launchState.error ? '启动失败' : '启动中');
+    const label = `${modeLabel} · ${baseLabel}`;
 
     return `
         <div class="${wrapClass}">
@@ -1225,6 +1237,21 @@ function getVisibleHomeProfiles() {
     });
 }
 
+async function launchProfileWithMode(profileId, controlMode = 'manual') {
+    const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const isAutomation = controlMode === 'automation';
+    upsertLaunchProgress(profileId, {
+        requestId,
+        progress: 0,
+        detail: isAutomation ? '准备 Agent 启动' : '准备手动启动',
+        error: false,
+        controlMode
+    });
+    renderProfileTable();
+    await window.xbrowser.launchProfile(profileId, requestId, controlMode);
+    showToast(isAutomation ? 'Agent 模式已启动。' : '手动模式已启动。');
+}
+
 function syncProfileSelectionState() {
     const validProfileIds = new Set(
         appState.profiles
@@ -1326,6 +1353,28 @@ function getBrowserRuntimeState() {
 
 function getAgentBatchState(runtimeAgent = getAgentRuntime()) {
     return runtimeAgent.batch || createEmptyAgentRuntimeState().batch;
+}
+
+function getAgentManualHandoffEvent(events = []) {
+    const items = Array.isArray(events) ? events : [];
+    let handoffEntry = null;
+
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+        const entry = items[index];
+        if (entry?.code === 'MANUAL_HANDOFF') {
+            handoffEntry = entry;
+            break;
+        }
+        if (
+            (entry?.kind === 'message' && (entry.role === 'user' || entry.role === 'assistant'))
+            || entry?.kind === 'tool'
+            || (entry?.kind === 'status' && entry?.code !== 'MANUAL_HANDOFF')
+        ) {
+            return null;
+        }
+    }
+
+    return handoffEntry;
 }
 
 function getAgentBatchCounts(batch = getAgentBatchState()) {
@@ -2216,6 +2265,7 @@ function renderAgentRuntime() {
     const modelCount = getAgentProviders().filter((provider) => String(provider.model || '').trim()).length;
     const hasSession = !!runtimeAgent.sessionId;
     const hasBatchState = !!batch.tasks.length;
+    const handoffEvent = getAgentManualHandoffEvent(runtimeAgent.events);
     const sessionProfileRuntime = runtimeAgent.profileId ? getRunning(runtimeAgent.profileId) : null;
     const currentBatchTask = batch.tasks.find((item) => item.id === batch.currentTaskId) || batch.tasks[0] || null;
     const displayProvider = batch.running || hasBatchState
@@ -2228,7 +2278,7 @@ function renderAgentRuntime() {
         ? (batch.stopRequested ? '停止中' : '执行中')
         : (hasBatchState
             ? `待清空（成功 ${counts.success} / 失败 ${counts.error} / 停止 ${counts.stopped}）`
-            : (runtimeAgent.running ? '执行中' : (hasSession ? '待命中' : '未启动')));
+            : (runtimeAgent.running ? '执行中' : (handoffEvent ? '等待人工接管' : (hasSession ? '待命中' : '未启动'))));
     const currentTarget = batch.running
         ? (currentBatchTask?.profileName || '-')
         : (hasBatchState ? `${counts.total} 个窗口` : (runtimeAgent.profileName || '-'));
@@ -2239,9 +2289,14 @@ function renderAgentRuntime() {
     const exportSummary = batch.exportFilePath
         ? `${batch.exportFilePath}${batch.exportedAt ? ` / ${formatDate(batch.exportedAt)}` : ''}`
         : '';
+    const sessionControlMode = sessionProfileRuntime?.controlMode === 'automation'
+        ? '受控模式'
+        : (sessionProfileRuntime?.controlMode === 'manual' ? '手动模式' : '');
     const browserState = batch.running || hasBatchState
         ? '按需接管或自动拉起批量窗口'
-        : (sessionProfileRuntime ? '已连接真实窗口' : (runtimeAgent.profileId ? '将自动拉起窗口' : '-'));
+        : (sessionProfileRuntime
+            ? `已连接真实窗口${sessionControlMode ? ` / ${sessionControlMode}` : ''}`
+            : (runtimeAgent.profileId ? '将自动拉起窗口' : '-'));
 
     if (batch.running) {
         agentActiveProviderBadge.textContent = `批量任务中 / ${counts.running || 1}/${counts.total || 1} / ${batch.model || '-'}`;
@@ -2526,17 +2581,9 @@ async function handleBodyActions(event) {
         return;
     }
 
-    if (action === 'launch-profile') {
-        const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        upsertLaunchProgress(id, {
-            requestId,
-            progress: 0,
-            detail: '准备启动',
-            error: false
-        });
-        renderProfileTable();
-        await window.xbrowser.launchProfile(id, requestId);
-        showToast('环境已启动。');
+    if (action === 'launch-profile' || action === 'launch-profile-manual' || action === 'launch-profile-agent') {
+        const controlMode = action === 'launch-profile-agent' ? 'automation' : 'manual';
+        await launchProfileWithMode(id, controlMode);
         return;
     }
 
@@ -3358,12 +3405,13 @@ navButtons.forEach((button) => {
 
 document.body.addEventListener('click', (event) => {
     handleBodyActions(event).catch((error) => {
-        const button = event.target.closest('[data-action="launch-profile"]');
+        const button = event.target.closest('[data-action="launch-profile"], [data-action="launch-profile-manual"], [data-action="launch-profile-agent"]');
         if (button?.dataset?.id) {
             upsertLaunchProgress(button.dataset.id, {
                 progress: 0,
                 detail: error.message || '启动失败',
-                error: true
+                error: true,
+                controlMode: button.dataset.action === 'launch-profile-agent' ? 'automation' : 'manual'
             });
             renderProfileTable();
             scheduleLaunchProgressCleanup(button.dataset.id, 1800);
@@ -3400,7 +3448,8 @@ window.xbrowser.onLaunchProgress((payload) => {
         requestId: payload.requestId || current?.requestId || '',
         progress: payload.progress || 0,
         detail: payload.detail || '',
-        error: !!payload.error
+        error: !!payload.error,
+        controlMode: payload.controlMode || current?.controlMode || 'manual'
     });
 
     renderProfileTable();

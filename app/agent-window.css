@@ -670,6 +670,34 @@ button:disabled {
     gap: 12px;
 }
 
+.handoff-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(244, 176, 79, 0.28);
+    background: rgba(244, 176, 79, 0.1);
+}
+
+.handoff-copy {
+    display: grid;
+    gap: 4px;
+}
+
+.handoff-title {
+    color: #ffe0a8;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.handoff-text {
+    color: #f7d8a0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
 .toast {
     position: fixed;
     right: 18px;
@@ -726,5 +754,9 @@ button:disabled {
 
     .toolbar {
         flex-direction: column;
+    }
+
+    .handoff-banner {
+        display: grid;
     }
 }

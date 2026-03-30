@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('xbrowser', {
     destroyProfile: (id) => ipcRenderer.invoke('profile:destroy', id),
     moveProfilesToProject: (payload) => ipcRenderer.invoke('profile:move-to-project', payload),
     clearProfileCache: (id) => ipcRenderer.invoke('profile:clear-cache', id),
-    launchProfile: (id, requestId = '') => ipcRenderer.invoke('profile:launch', { id, requestId }),
+    launchProfile: (id, requestId = '', controlMode = 'manual') => ipcRenderer.invoke('profile:launch', { id, requestId, controlMode }),
     stopProfile: (id) => ipcRenderer.invoke('profile:stop', id),
     listTemplates: () => ipcRenderer.invoke('template:list'),
     saveTemplate: (payload) => ipcRenderer.invoke('template:save', payload),

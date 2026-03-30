@@ -139,6 +139,52 @@ const runningProfiles = new Map();
 let agentController = null;
 let syncController = null;
 let updaterController = null;
+const PROFILE_CONTROL_MODES = Object.freeze({
+    MANUAL: 'manual',
+    AUTOMATION: 'automation'
+});
+
+function normalizeProfileControlMode(value) {
+    return value === PROFILE_CONTROL_MODES.AUTOMATION
+        ? PROFILE_CONTROL_MODES.AUTOMATION
+        : PROFILE_CONTROL_MODES.MANUAL;
+}
+
+function getProfileControlModeLabel(value) {
+    return normalizeProfileControlMode(value) === PROFILE_CONTROL_MODES.AUTOMATION
+        ? '受控模式'
+        : '手动模式';
+}
+
+function isAutomationRuntime(runtime) {
+    return normalizeProfileControlMode(runtime?.controlMode) === PROFILE_CONTROL_MODES.AUTOMATION
+        && !!runtime?.debugPort;
+}
+
+function isBrowserLaunchableUrl(url = '') {
+    const target = String(url || '').trim();
+    if (!target) {
+        return false;
+    }
+    return !target.startsWith('chrome-extension://') && !target.startsWith('devtools://');
+}
+
+function buildManualStartupArguments(primaryUrl, extraUrls = []) {
+    const queue = [primaryUrl].concat(Array.isArray(extraUrls) ? extraUrls : []);
+    const launchUrls = [];
+    const seen = new Set();
+
+    for (const item of queue) {
+        const target = String(item || '').trim();
+        if (!isBrowserLaunchableUrl(target) || seen.has(target)) {
+            continue;
+        }
+        seen.add(target);
+        launchUrls.push(target);
+    }
+
+    return launchUrls.length ? launchUrls : ['about:blank'];
+}
 
 function createEmptyBrowserInstallState() {
     return {
@@ -3259,7 +3305,9 @@ async function withProfileCdpSession(profileId, callback) {
 
     let runtime = runningProfiles.get(profileId);
     if (!runtime) {
-        runtime = await openProfile(profileId, { requestId: `account-cookie-${Date.now()}` });
+        runtime = await ensureAutomationRuntime(profileId, { requestId: `account-cookie-${Date.now()}` });
+    } else if (!isAutomationRuntime(runtime)) {
+        throw new Error('当前环境正在以手动模式运行，请先停止后再执行需要受控浏览器的操作');
     }
 
     if (!runtime?.debugPort) {
@@ -3314,7 +3362,9 @@ async function captureProfileLocalStorage(profileId) {
 
     let runtime = runningProfiles.get(profileId);
     if (!runtime) {
-        runtime = await openProfile(profileId, { requestId: `account-storage-${Date.now()}` });
+        runtime = await ensureAutomationRuntime(profileId, { requestId: `account-storage-${Date.now()}` });
+    } else if (!isAutomationRuntime(runtime)) {
+        throw new Error('当前环境正在以手动模式运行，请先停止后再执行需要受控浏览器的操作');
     }
 
     if (!runtime?.debugPort) {
@@ -3908,6 +3958,27 @@ async function openStartupTabs(browserCdpRuntime, urls = []) {
     return opened;
 }
 
+async function ensureAutomationRuntime(profileId, {
+    requestId = '',
+    restoreSession = false,
+    skipAccountAssets = false
+} = {}) {
+    const runtime = runningProfiles.get(profileId);
+    if (runtime?.browserPid) {
+        if (isAutomationRuntime(runtime)) {
+            return runtime;
+        }
+        throw new Error('当前环境正在以手动模式运行，请先停止后再切换为受控模式');
+    }
+
+    return openProfile(profileId, {
+        requestId,
+        restoreSession,
+        skipAccountAssets,
+        controlMode: PROFILE_CONTROL_MODES.AUTOMATION
+    });
+}
+
 async function buildDashboardPayload(profileId, { refresh = false } = {}) {
     const profile = getProfile(profileId);
     if (!profile) {
@@ -4071,7 +4142,8 @@ function buildState() {
                 port: runtime.port,
                 debugPort: runtime.debugPort || null,
                 url: runtime.url,
-                pid: runtime.browserPid || null
+                pid: runtime.browserPid || null,
+                controlMode: normalizeProfileControlMode(runtime.controlMode)
             })),
             providerFormats: PROVIDER_FORMATS.map((item) => ({
                 value: item.value,
@@ -4235,18 +4307,40 @@ async function clearProfileStorageData(profileId, { cookies = false, localStorag
     };
 }
 
-async function openProfile(profileId, { requestId = '', restoreSession = false, skipAccountAssets = false } = {}) {
+async function openProfile(profileId, {
+    requestId = '',
+    restoreSession = false,
+    skipAccountAssets = false,
+    controlMode = PROFILE_CONTROL_MODES.MANUAL
+} = {}) {
     const profile = getProfile(profileId);
     if (!profile) throw new Error('环境不存在');
     if (profile.deletedAt) throw new Error('环境已在回收站，请先恢复后再启动');
+    const normalizedControlMode = normalizeProfileControlMode(controlMode);
+    const controlModeLabel = getProfileControlModeLabel(normalizedControlMode);
 
     const existing = runningProfiles.get(profileId);
     if (existing?.browserPid) {
-        reportLaunchProgress(profile, requestId, 100, 'completed', '窗口已在运行', { done: true });
+        const existingMode = normalizeProfileControlMode(existing.controlMode);
+        if (existingMode !== normalizedControlMode && normalizedControlMode === PROFILE_CONTROL_MODES.AUTOMATION) {
+            const modeError = '当前环境已以手动模式运行，请先停止后再切换为受控模式';
+            reportLaunchProgress(profile, requestId, 0, 'mode-conflict', modeError, {
+                error: true,
+                done: true,
+                controlMode: normalizedControlMode
+            });
+            throw new Error(modeError);
+        }
+        reportLaunchProgress(profile, requestId, 100, 'completed', '窗口已在运行', {
+            done: true,
+            controlMode: existingMode
+        });
         return existing;
     }
 
-    reportLaunchProgress(profile, requestId, 6, 'prepare', '校验浏览器环境');
+    reportLaunchProgress(profile, requestId, 6, 'prepare', `校验浏览器环境并准备${controlModeLabel}`, {
+        controlMode: normalizedControlMode
+    });
 
     let browserBinary = resolveManagedBrowserExecutable(settings?.browser?.activeVersion || '');
     if (!browserBinary) {
@@ -4317,18 +4411,28 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
         await fs.ensureDir(userDataDir);
         await ensureChromiumPreferences(userDataDir, launchFingerprint);
 
-        reportLaunchProgress(profile, requestId, linkedProxy ? 68 : 62, 'extension', '生成指纹扩展');
-        const extensionDir = await ensureFingerprintExtension(userDataDir, profile.id, launchFingerprint);
+        let extensionDir = '';
+        if (normalizedControlMode === PROFILE_CONTROL_MODES.AUTOMATION) {
+            reportLaunchProgress(profile, requestId, linkedProxy ? 68 : 62, 'extension', '生成受控指纹扩展');
+            extensionDir = await ensureFingerprintExtension(userDataDir, profile.id, launchFingerprint);
+        } else {
+            reportLaunchProgress(profile, requestId, linkedProxy ? 68 : 62, 'extension', '准备手动浏览扩展');
+        }
         const profileExtensions = (profile.extensionIds || [])
             .map((extensionId) => getExtension(extensionId))
             .filter((extension) => extension && extension.enabled && extension.path && fs.existsSync(extension.path));
-        const extensionDirs = [extensionDir].concat(profileExtensions.map((extension) => extension.path));
+        const extensionDirs = []
+            .concat(extensionDir ? [extensionDir] : [])
+            .concat(profileExtensions.map((extension) => extension.path));
         const startUrl = isBuiltInStartUrl(profile.startUrl) ? getDefaultStartPageUrl(profile.id) : profile.startUrl;
-        debugPort = await getPort();
+        debugPort = normalizedControlMode === PROFILE_CONTROL_MODES.AUTOMATION ? await getPort() : null;
         const launchWindow = resolveWindowLaunchBounds(launchFingerprint);
         const uiLanguage = launchFingerprint.uiLanguage && launchFingerprint.uiLanguage !== 'auto'
             ? launchFingerprint.uiLanguage
             : (launchFingerprint.language || 'en-US');
+        const manualStartupUrls = shouldRestoreSession
+            ? []
+            : buildManualStartupArguments(startUrl, launchFingerprint.startupUrls || []);
         const runtime = {
             browserPid: null,
             browserBinary,
@@ -4342,7 +4446,8 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
             debugPort,
             url: startUrl,
             launchFingerprint,
-            dashboardGeo: null
+            dashboardGeo: null,
+            controlMode: normalizedControlMode
         };
 
         runningProfiles.set(profile.id, runtime);
@@ -4350,15 +4455,20 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
         const launchArgs = [
             `--user-data-dir=${userDataDir}`,
             `--lang=${uiLanguage}`,
-            `--user-agent=${launchFingerprint.userAgent}`,
-            `--remote-debugging-port=${debugPort}`,
             '--no-first-run',
             '--no-default-browser-check',
             '--disable-features=Translate,OptimizationHints,MediaRouter',
-            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
-            `--disable-extensions-except=${extensionDirs.join(',')}`,
-            `--load-extension=${extensionDirs.join(',')}`,
+            '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'
         ];
+
+        if (normalizedControlMode === PROFILE_CONTROL_MODES.AUTOMATION) {
+            launchArgs.push(`--user-agent=${launchFingerprint.userAgent}`);
+            launchArgs.push(`--remote-debugging-port=${debugPort}`);
+        }
+        if (extensionDirs.length) {
+            launchArgs.push(`--disable-extensions-except=${extensionDirs.join(',')}`);
+            launchArgs.push(`--load-extension=${extensionDirs.join(',')}`);
+        }
 
         if (launchWindow.sizeMode === 'fullscreen') {
             launchArgs.push('--start-fullscreen');
@@ -4383,8 +4493,10 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
         }
         if (shouldRestoreSession) {
             launchArgs.push('--restore-last-session');
-        } else {
+        } else if (normalizedControlMode === PROFILE_CONTROL_MODES.AUTOMATION) {
             launchArgs.push('about:blank');
+        } else {
+            launchArgs.push(...manualStartupUrls);
         }
 
         reportLaunchProgress(profile, requestId, linkedProxy ? 80 : 76, 'spawn', '拉起浏览器进程');
@@ -4402,63 +4514,76 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
             }
         });
 
-        reportLaunchProgress(profile, requestId, linkedProxy ? 88 : 84, 'window-ready', '等待调试窗口就绪');
-        await waitForBrowserWindowReady(debugPort);
+        if (normalizedControlMode === PROFILE_CONTROL_MODES.AUTOMATION) {
+            reportLaunchProgress(profile, requestId, linkedProxy ? 88 : 84, 'window-ready', '等待受控浏览器调试窗口就绪');
+            await waitForBrowserWindowReady(debugPort);
 
-        reportLaunchProgress(profile, requestId, linkedProxy ? 94 : 90, 'inject', '注入首屏指纹并跳转');
-        runtime.browserCdpSession = await primeInitialPageFingerprint(
-            debugPort,
-            launchFingerprint,
-            shouldRestoreSession ? '' : startUrl
-        );
+            reportLaunchProgress(profile, requestId, linkedProxy ? 94 : 90, 'inject', '注入首屏指纹并跳转');
+            runtime.browserCdpSession = await primeInitialPageFingerprint(
+                debugPort,
+                launchFingerprint,
+                shouldRestoreSession ? '' : startUrl
+            );
 
-        if (!shouldRestoreSession && Array.isArray(launchFingerprint.startupUrls) && launchFingerprint.startupUrls.length) {
-            try {
-                const openedTabs = await openStartupTabs(runtime.browserCdpSession, launchFingerprint.startupUrls);
-                if (openedTabs > 0) {
-                    reportLaunchProgress(profile, requestId, 95, 'startup-tabs', `已补开 ${openedTabs} 个启动标签页`);
+            if (!shouldRestoreSession && Array.isArray(launchFingerprint.startupUrls) && launchFingerprint.startupUrls.length) {
+                try {
+                    const openedTabs = await openStartupTabs(runtime.browserCdpSession, launchFingerprint.startupUrls);
+                    if (openedTabs > 0) {
+                        reportLaunchProgress(profile, requestId, 95, 'startup-tabs', `已补开 ${openedTabs} 个启动标签页`);
+                    }
+                } catch (error) {
+                    reportLaunchProgress(profile, requestId, 95, 'startup-tabs-error', `额外 URL 打开失败：${error.message || 'unknown'}`);
                 }
-            } catch (error) {
-                reportLaunchProgress(profile, requestId, 95, 'startup-tabs-error', `额外 URL 打开失败：${error.message || 'unknown'}`);
             }
-        }
 
-        const boundAccount = getPrimaryAccountForProfile(profile.id);
-        if (boundAccount && !shouldSkipAccountAssets) {
-            reportLaunchProgress(profile, requestId, 96, 'account-assets', '同步已绑定账号数据');
-            try {
-                const injection = await autoInjectAccountAssets(profile.id);
-                if (injection.injected) {
-                    reportLaunchProgress(
-                        profile,
-                        requestId,
-                        98,
-                        'account-assets-ready',
-                        `已注入账号数据：Cookie ${injection.cookies} 条，Storage ${injection.storageOrigins} 站点/${injection.storageItems} 项`
-                    );
-                } else {
-                    reportLaunchProgress(profile, requestId, 98, 'account-assets-skip', '已绑定账号，但没有可注入的数据');
+            const boundAccount = getPrimaryAccountForProfile(profile.id);
+            if (boundAccount && !shouldSkipAccountAssets) {
+                reportLaunchProgress(profile, requestId, 96, 'account-assets', '同步已绑定账号数据');
+                try {
+                    const injection = await autoInjectAccountAssets(profile.id);
+                    if (injection.injected) {
+                        reportLaunchProgress(
+                            profile,
+                            requestId,
+                            98,
+                            'account-assets-ready',
+                            `已注入账号数据：Cookie ${injection.cookies} 条，Storage ${injection.storageOrigins} 站点/${injection.storageItems} 项`
+                        );
+                    } else {
+                        reportLaunchProgress(profile, requestId, 98, 'account-assets-skip', '已绑定账号，但没有可注入的数据');
+                    }
+                } catch (error) {
+                    reportLaunchProgress(profile, requestId, 98, 'account-assets-error', `账号自动注入失败：${error.message || 'unknown'}`);
                 }
-            } catch (error) {
-                reportLaunchProgress(profile, requestId, 98, 'account-assets-error', `账号自动注入失败：${error.message || 'unknown'}`);
             }
-        }
 
-        if (launchFingerprint.storagePreset?.cookies || launchFingerprint.storagePreset?.localStorage) {
-            reportLaunchProgress(profile, requestId, 99, 'profile-assets', '应用窗口级 Cookies / Storage 预置');
-            try {
-                const injection = await autoInjectProfileStoragePreset(profile.id, launchFingerprint);
-                if (injection.injected) {
-                    reportLaunchProgress(
-                        profile,
-                        requestId,
-                        99,
-                        'profile-assets-ready',
-                        `已应用窗口预置：Cookie ${injection.cookies} 条，Storage ${injection.storageOrigins} 站点/${injection.storageItems} 项`
-                    );
+            if (launchFingerprint.storagePreset?.cookies || launchFingerprint.storagePreset?.localStorage) {
+                reportLaunchProgress(profile, requestId, 99, 'profile-assets', '应用窗口级 Cookies / Storage 预置');
+                try {
+                    const injection = await autoInjectProfileStoragePreset(profile.id, launchFingerprint);
+                    if (injection.injected) {
+                        reportLaunchProgress(
+                            profile,
+                            requestId,
+                            99,
+                            'profile-assets-ready',
+                            `已应用窗口预置：Cookie ${injection.cookies} 条，Storage ${injection.storageOrigins} 站点/${injection.storageItems} 项`
+                        );
+                    }
+                } catch (error) {
+                    reportLaunchProgress(profile, requestId, 99, 'profile-assets-error', `窗口预置注入失败：${error.message || 'unknown'}`);
                 }
-            } catch (error) {
-                reportLaunchProgress(profile, requestId, 99, 'profile-assets-error', `窗口预置注入失败：${error.message || 'unknown'}`);
+            }
+        } else {
+            reportLaunchProgress(profile, requestId, linkedProxy ? 88 : 84, 'window-ready', '等待手动浏览窗口就绪');
+            await sleep(1200);
+            if (!runningProfiles.has(profile.id)) {
+                throw new Error('手动浏览窗口启动失败，请检查浏览器内核或扩展配置');
+            }
+            const hasBoundAccountAssets = !!getPrimaryAccountForProfile(profile.id);
+            const hasProfileStoragePreset = !!(launchFingerprint.storagePreset?.cookies || launchFingerprint.storagePreset?.localStorage);
+            if (hasBoundAccountAssets || hasProfileStoragePreset) {
+                reportLaunchProgress(profile, requestId, 95, 'manual-safe', '手动模式已跳过受控注入能力');
             }
         }
 
@@ -4487,7 +4612,11 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
                 try { fs.closeSync(coreRuntime.logFd); } catch (closeError) { }
             }
         }
-        reportLaunchProgress(profile, requestId, 0, 'error', error.message || '启动失败', { error: true, done: true });
+        reportLaunchProgress(profile, requestId, 0, 'error', error.message || '启动失败', {
+            error: true,
+            done: true,
+            controlMode: normalizedControlMode
+        });
         throw error;
     }
 }
@@ -4747,10 +4876,7 @@ app.whenReady().then(async () => {
         }),
         getProfile: (profileId) => getProfile(profileId),
         ensureRuntime: async (profileId) => {
-            if (!runningProfiles.has(profileId)) {
-                await openProfile(profileId, { requestId: `agent-${Date.now()}` });
-            }
-            return runningProfiles.get(profileId) || null;
+            return ensureAutomationRuntime(profileId, { requestId: `agent-${Date.now()}` });
         },
         onLog: notifyAgentEvent,
         onStateChanged: notifyState
@@ -4759,10 +4885,7 @@ app.whenReady().then(async () => {
         getProfile: (profileId) => getProfile(profileId),
         getRuntime: (profileId) => runningProfiles.get(profileId) || null,
         ensureRuntime: async (profileId) => {
-            if (!runningProfiles.has(profileId)) {
-                await openProfile(profileId, { requestId: `sync-${Date.now()}` });
-            }
-            return runningProfiles.get(profileId) || null;
+            return ensureAutomationRuntime(profileId, { requestId: `sync-${Date.now()}` });
         },
         waitForPageTarget: async (debugPort) => waitForPageTarget(debugPort),
         createCdpSession: async (webSocketDebuggerUrl) => createCdpSession(webSocketDebuggerUrl),
@@ -4924,7 +5047,8 @@ app.whenReady().then(async () => {
     ipcMain.handle('profile:launch', async (event, payload) => {
         const profileId = typeof payload === 'string' ? payload : payload?.id;
         const requestId = typeof payload === 'string' ? '' : (payload?.requestId || '');
-        await openProfile(profileId, { requestId });
+        const controlMode = typeof payload === 'string' ? PROFILE_CONTROL_MODES.MANUAL : payload?.controlMode;
+        await openProfile(profileId, { requestId, controlMode });
         return true;
     });
     ipcMain.handle('profile:stop', async (event, id) => stopProfile(id));
