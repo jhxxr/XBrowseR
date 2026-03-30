@@ -1,6 +1,6 @@
 {
   "name": "xbrowser",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Mihomo-powered fingerprint browser manager",
   "main": "main.js",
   "author": "OpenAI Codex",

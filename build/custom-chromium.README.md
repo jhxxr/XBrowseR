@@ -4,7 +4,7 @@ Default behavior:
 
 - XBrowseR now uses official Chromium snapshots from the public Chromium snapshots bucket.
 - Versions are identified by snapshot revision, for example `r1606646`.
-- Downloaded kernels are stored under `bin/chromium/official/<revision>`.
+- Downloaded kernels are stored under `data/browser-kernels/official/<revision>`.
 
 ## In-App Management
 

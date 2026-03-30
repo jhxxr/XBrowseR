@@ -23,6 +23,7 @@ const {
     OFFICIAL_BROWSER_SOURCE_NAME,
     getOfficialBrowserRoot,
     listInstalledBrowsers,
+    migrateLegacyOfficialBrowsers,
     fetchAvailableOfficialBrowsers,
     installOfficialBrowserRevision,
     ensureBundledBrowser,
@@ -4250,7 +4251,7 @@ async function openProfile(profileId, { requestId = '', restoreSession = false, 
     let browserBinary = resolveManagedBrowserExecutable(settings?.browser?.activeVersion || '');
     if (!browserBinary) {
         reportLaunchProgress(profile, requestId, 8, 'browser-download', '准备内置浏览器内核');
-        await ensureBundledBrowser(BASE_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
+        await ensureBundledBrowser(DATA_ROOT_DIR, { activeVersion: settings?.browser?.activeVersion || '' });
         const installedBrowsers = listManagedBrowsers();
         if (!settings.browser.activeVersion && installedBrowsers[0]) {
             settings.browser.activeVersion = installedBrowsers[0].id;
@@ -4707,6 +4708,11 @@ app.whenReady().then(async () => {
         await ensureBundledMihomo(BASE_DIR);
     } catch (error) {
         console.error(`Failed to auto-download Mihomo ${MIHOMO_VERSION}:`, error);
+    }
+
+    const migratedBrowserRevisions = migrateLegacyOfficialBrowsers(DATA_ROOT_DIR);
+    if (migratedBrowserRevisions.length) {
+        console.info(`[browser] migrated Chromium revisions to persistent storage: ${migratedBrowserRevisions.join(', ')}`);
     }
 
     profiles = normalizeProfilesWithCodes(await store.loadProfiles());
