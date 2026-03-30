@@ -3772,10 +3772,21 @@ async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUr
     const browserSession = await createCdpSession(browserTarget.webSocketDebuggerUrl);
     const preloadScript = createPageScript(fingerprint);
     const processedTargetIds = new Set();
+    const attachedTargetSessions = new Map();
 
     const attachAndApply = async (targetId, targetInfo = {}, { navigate = false, navigationUrl = '' } = {}) => {
-        if (!targetId || processedTargetIds.has(targetId) || !shouldInstrumentTarget(targetInfo)) {
+        if (!targetId || !shouldInstrumentTarget(targetInfo)) {
             return null;
+        }
+
+        const existingSessionId = attachedTargetSessions.get(targetId);
+        if (processedTargetIds.has(targetId)) {
+            if (navigate && navigationUrl && existingSessionId) {
+                await browserSession.send('Page.navigate', {
+                    url: navigationUrl
+                }, 5000, existingSessionId);
+            }
+            return existingSessionId || null;
         }
 
         processedTargetIds.add(targetId);
@@ -3789,6 +3800,7 @@ async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUr
                 processedTargetIds.delete(targetId);
                 return null;
             }
+            attachedTargetSessions.set(targetId, sessionId);
 
             await applyFingerprintToCdpTarget(browserSession, fingerprint, {
                 sessionId,
@@ -3818,6 +3830,7 @@ async function primeInitialPageFingerprint(debugPort, fingerprint, destinationUr
         }
         try {
             processedTargetIds.add(targetId);
+            attachedTargetSessions.set(targetId, targetSessionId);
             await applyFingerprintToCdpTarget(browserSession, fingerprint, {
                 sessionId: targetSessionId,
                 preloadScript,
